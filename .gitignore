@@ -1,0 +1,8 @@
+plugins/alk-axapta-tools/scripts/XPOTools/config.local.json
+plugins/alk-axapta-tools/scripts/XPOTools/__pycache__/
+plugins/alk-axapta-tools/scripts/XPOTools/**/__pycache__/
+plugins/alk-axapta-tools/scripts/XPOTools/*.pyc
+plugins/alk-axapta-tools/scripts/XPOTools/**/*.pyc
+plugins/alk-axapta-tools/scripts/XPOTools/.pytest_cache/
+plugins/alk-axapta-tools/scripts/XPOTools/.venv/
+.env

@@ -1,0 +1,19 @@
+{
+  "name": "alk-axapta",
+  "owner": {
+    "name": "ALK Development Team"
+  },
+  "description": "Приватный магазин скиллов: инструменты для работы с проектами Microsoft Dynamics AX 2012 (ALK).",
+  "version": "1.0.0",
+  "plugins": [
+    {
+      "name": "alk-axapta-tools",
+      "source": "./plugins/alk-axapta-tools",
+      "description": "Скиллы axapta-mod-comments, axapta-project-export, axapta-project-manage + инструментарий XPOTools.",
+      "version": "1.0.0",
+      "author": {
+        "name": "ALK Development Team"
+      }
+    }
+  ]
+}
