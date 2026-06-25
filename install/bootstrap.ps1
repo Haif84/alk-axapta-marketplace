@@ -6,6 +6,8 @@
     1. Проверяет наличие Python >= 3.9.
     2. Записывает user-level ENV-переменные, которые XPOTools читает приоритетно
        (ALK_PROJECT_PREFIX, ALK_USER_NICK, ALK_AOT_PROD).
+    3. Устанавливает хук move-plan.ps1: после ExitPlanMode автоматически
+       перекладывает планы из ~/.claude/plans/ в <cwd>/plans/.
     Эти переменные переживают обновления плагина, т.к. хранятся в профиле
     пользователя (HKCU\Environment), а не внутри кэша плагина.
 
@@ -80,6 +82,55 @@ function Set-UserEnv {
 Set-UserEnv 'ALK_PROJECT_PREFIX' $ProjectPrefix
 Set-UserEnv 'ALK_USER_NICK'      $UserNick
 Set-UserEnv 'ALK_AOT_PROD'       $AotProd
+
+# 3. Хук move-plan: после ExitPlanMode копирует план в <cwd>/plans/
+$hooksDir   = Join-Path $env:USERPROFILE '.claude\hooks'
+$hookSrc    = Join-Path $PSScriptRoot '..\plugins\alk-axapta-tools\scripts\hooks\move-plan.ps1'
+$hookDst    = Join-Path $hooksDir 'move-plan.ps1'
+
+New-Item -ItemType Directory -Force -Path $hooksDir | Out-Null
+
+if (Test-Path $hookSrc) {
+    Copy-Item -Path $hookSrc -Destination $hookDst -Force
+    Write-Host "[+]  move-plan.ps1 -> $hookDst"
+} else {
+    Write-Warning "Хук не найден: $hookSrc — пропускаю."
+}
+
+# Прописываем хук в ~/.claude/settings.json
+$settingsPath = Join-Path $env:USERPROFILE '.claude\settings.json'
+$settings = if (Test-Path $settingsPath) {
+    Get-Content $settingsPath -Raw | ConvertFrom-Json
+} else {
+    [PSCustomObject]@{}
+}
+
+if (-not $settings.PSObject.Properties['hooks']) {
+    $settings | Add-Member -NotePropertyName 'hooks' -NotePropertyValue ([PSCustomObject]@{})
+}
+if (-not $settings.hooks.PSObject.Properties['PostToolUse']) {
+    $settings.hooks | Add-Member -NotePropertyName 'PostToolUse' -NotePropertyValue @()
+}
+
+$already = $settings.hooks.PostToolUse | Where-Object { $_.matcher -eq 'ExitPlanMode' }
+if (-not $already) {
+    $newEntry = [PSCustomObject]@{
+        matcher = 'ExitPlanMode'
+        hooks   = @(
+            [PSCustomObject]@{
+                type    = 'command'
+                command = "powershell -NoProfile -ExecutionPolicy Bypass -File `"$hookDst`""
+            }
+        )
+    }
+    $arr = [System.Collections.Generic.List[object]]($settings.hooks.PostToolUse)
+    $arr.Add($newEntry)
+    $settings.hooks.PostToolUse = $arr.ToArray()
+    $settings | ConvertTo-Json -Depth 10 | Set-Content $settingsPath -Encoding UTF8
+    Write-Host "[+]  ExitPlanMode hook прописан в $settingsPath"
+} else {
+    Write-Host "[ok] ExitPlanMode hook уже прописан"
+}
 
 Write-Host ''
 Write-Host '==> Done.' -ForegroundColor Green
