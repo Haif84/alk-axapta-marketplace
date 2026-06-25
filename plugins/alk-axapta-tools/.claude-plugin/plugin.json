@@ -5,5 +5,9 @@
   "author": {
     "name": "ALK Development Team"
   },
-  "license": "UNLICENSED"
+  "license": "UNLICENSED",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Haif84/alk-axapta-marketplace"
+  }
 }

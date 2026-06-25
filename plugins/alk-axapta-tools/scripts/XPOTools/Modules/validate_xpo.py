@@ -24,7 +24,7 @@ from typing import Dict, List, Optional, Tuple
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from xpo_types import XPO_TYPES, NO_MARKER_REQUIRED, dir_path_for  # noqa: E402
-from config import load_config  # noqa: E402
+from config import load_config, check_config, print_config_warnings  # noqa: E402
 
 if sys.platform == "win32":
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
@@ -152,6 +152,39 @@ def check_markers(path: pathlib.Path, text: str, prefix: str) -> List[Issue]:
                   f"no axapta-mod-comments marker (expected `//{prefix}...`)")]
 
 
+def check_source_block_wrapping(path: pathlib.Path, text: str, prefix: str) -> List[Issue]:
+    """WARN если первая непустая строка SOURCE-блока — открывающий блок-маркер
+    `// + PREFIX… -->`. Для нового метода нужен однострочный header-комментарий,
+    не пара открывающий/закрывающий блок."""
+    if not prefix:
+        return []
+    issues = []
+    source_re = re.compile(r"^\s*SOURCE\s+#(\S+)\s*$", re.MULTILINE)
+    open_block_re = re.compile(r"^\s*#\s*//\s*\+\s*" + re.escape(prefix))
+    lines = text.splitlines()
+    i = 0
+    while i < len(lines):
+        m = source_re.match(lines[i])
+        if m:
+            method_name = m.group(1)
+            i += 1
+            while i < len(lines):
+                stripped = lines[i].strip()
+                if stripped == "ENDSOURCE":
+                    break
+                if stripped:
+                    if open_block_re.match(lines[i]):
+                        issues.append(Issue(
+                            str(path), "WARN",
+                            f"SOURCE #{method_name}: starts with block-open marker "
+                            f"`// + {prefix}…` — new method should use "
+                            f"single header `// {prefix}…` instead",
+                        ))
+                    break
+        i += 1
+    return issues
+
+
 def detect_object(path: pathlib.Path, text: str) -> Tuple[str, str]:
     lines = text.splitlines()
     mnemonic = ""
@@ -267,6 +300,7 @@ def validate_one(
     issues.extend(check_balance(path, text))
     issues.extend(check_mojibake(path, text))
     issues.extend(check_markers(path, text, prefix))
+    issues.extend(check_source_block_wrapping(path, text, prefix))
     obj = detect_object(path, text)
     if root is not None and obj[0]:
         issues.extend(check_layout_consistency(path, root, obj[0], text))
@@ -274,6 +308,7 @@ def validate_one(
 
 
 def main() -> int:
+    print_config_warnings(check_config())
     cfg = load_config()
     parser = argparse.ArgumentParser(description="Валидатор xpo-файлов")
     parser.add_argument("target", help="Файл или директория")

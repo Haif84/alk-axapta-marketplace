@@ -52,6 +52,30 @@ python "${CLAUDE_PLUGIN_ROOT}/scripts/XPOTools/build-shared-project.py" --root .
 
 ## Алгоритм
 
+### 0. Проверка конфига (ПЕРВЫЙ ШАГ — до любых инструментов)
+
+Проверь наличие `config.local.json` в папке XPOTools:
+
+```powershell
+Test-Path "C:/Users/$env:USERNAME/.claude/plugins/cache/alk-axapta/alk-axapta-tools/1.0.0/scripts/XPOTools/config.local.json"
+```
+
+Если файл **отсутствует** — через `AskUserQuestion` запроси у пользователя три значения:
+- `ALK_PROJECT_PREFIX` (например `ALK_DEVAX12`)
+- `ALK_USER_NICK` (ник разработчика)
+- `ALK_AOT_PROD` (путь к папке AOT-Prod, можно оставить пустым)
+
+Затем создай файл через `Write`:
+```json
+{
+  "ALK_PROJECT_PREFIX": "<значение>",
+  "ALK_USER_NICK": "<значение>",
+  "ALK_AOT_PROD": "<значение или пустая строка>"
+}
+```
+
+Без этого файла `validate-xpo` не проверяет маркеры модификаций и не ловит ошибки типа «блок вместо header».
+
 ### 1. Сбор контекста
 
 0. **Проверь layout XPO/.** Если файлы лежат плоско (`xpo\Class_*.xpo`, `xpo\Table_*.xpo`, ...) и в задаче ≥10 объектов разных типов — предложи пользователю сначала прогнать `organize-xpo organize --root .\XPO --dry-run` (скилл [axapta-project-manage](file:///C:/Users/akaz/.claude/skills/axapta-project-manage/SKILL.md)). Это упрощает навигацию и diff с боевой выгрузкой `AOT-Prod`. На саму сборку `build-shared-project` это **не влияет** — сборщик поддерживает оба layout (плоский и AOT) через рекурсивный glob. Шаг опциональный, но рекомендуется перед финальным релизом.
