@@ -10,6 +10,15 @@
       "name": "alk-axapta-tools",
       "source": "./plugins/alk-axapta-tools",
       "description": "Скиллы axapta-mod-comments, axapta-project-export, axapta-project-manage + инструментарий XPOTools.",
+      "version": "1.1.0",
+      "author": {
+        "name": "ALK Development Team"
+      }
+    },
+    {
+      "name": "alk-hooks-plans2project",
+      "source": "./plugins/alk-hooks-plans2project",
+      "description": "Hook: после ExitPlanMode перекладывает планы из ~/.claude/plans/ в <cwd>/plans/.",
       "version": "1.0.0",
       "author": {
         "name": "ALK Development Team"

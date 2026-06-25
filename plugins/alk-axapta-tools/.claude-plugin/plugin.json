@@ -1,7 +1,7 @@
 {
   "name": "alk-axapta-tools",
   "description": "Скиллы для работы с проектами Microsoft Dynamics AX 2012 (ALK): комментарии модификаций, сборка XPO-бандла, управление структурой XPO/. Включает XPOTools (Python-инструментарий) — установка PATH не требуется.",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "author": {
     "name": "ALK Development Team"
   },

@@ -85,7 +85,7 @@ Set-UserEnv 'ALK_AOT_PROD'       $AotProd
 
 # 3. Хук move-plan: после ExitPlanMode копирует план в <cwd>/plans/
 $hooksDir   = Join-Path $env:USERPROFILE '.claude\hooks'
-$hookSrc    = Join-Path $PSScriptRoot '..\plugins\alk-axapta-tools\scripts\hooks\move-plan.ps1'
+$hookSrc    = Join-Path $PSScriptRoot '..\plugins\alk-hooks-plans2project\scripts\hooks\move-plan.ps1'
 $hookDst    = Join-Path $hooksDir 'move-plan.ps1'
 
 New-Item -ItemType Directory -Force -Path $hooksDir | Out-Null

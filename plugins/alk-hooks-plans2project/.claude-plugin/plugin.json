@@ -1,0 +1,13 @@
+{
+  "name": "alk-hooks-plans2project",
+  "description": "Hook: после ExitPlanMode автоматически перекладывает планы из ~/.claude/plans/ в <cwd>/plans/. Установка через bootstrap.ps1.",
+  "version": "1.0.0",
+  "author": {
+    "name": "ALK Development Team"
+  },
+  "license": "UNLICENSED",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Haif84/alk-axapta-marketplace"
+  }
+}
