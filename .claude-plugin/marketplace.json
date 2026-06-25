@@ -3,14 +3,14 @@
   "owner": {
     "name": "ALK Development Team"
   },
-  "description": "Приватный магазин скиллов: инструменты для работы с проектами Microsoft Dynamics AX 2012 (ALK).",
+  "description": "Магазин скиллов: инструменты для работы с проектами Microsoft Dynamics AX 2012 (ALK).",
   "version": "1.0.0",
   "plugins": [
     {
       "name": "alk-axapta-tools",
       "source": "./plugins/alk-axapta-tools",
       "description": "Скиллы axapta-mod-comments, axapta-project-export, axapta-project-manage + инструментарий XPOTools.",
-      "version": "1.1.0",
+      "version": "1.1.1",
       "author": {
         "name": "ALK Development Team"
       }
@@ -19,6 +19,15 @@
       "name": "alk-hooks-plans2project",
       "source": "./plugins/alk-hooks-plans2project",
       "description": "Hook: после ExitPlanMode перекладывает планы из ~/.claude/plans/ в <cwd>/plans/.",
+      "version": "1.0.0",
+      "author": {
+        "name": "ALK Development Team"
+      }
+    },
+    {
+      "name": "alk-self-update",
+      "source": "./plugins/alk-self-update",
+      "description": "Дневной cron-уведомитель о новых версиях маркетплейса (обновление выполняет native autoUpdate).",
       "version": "1.0.0",
       "author": {
         "name": "ALK Development Team"

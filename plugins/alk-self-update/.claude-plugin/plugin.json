@@ -1,0 +1,9 @@
+{
+  "name": "alk-self-update",
+  "description": "Проверка обновлений маркетплейса alk-axapta. Дневной cron-уведомитель о новых версиях для долго открытых сессий (обновление выполняет native autoUpdate при старте VS Code).",
+  "version": "1.0.0",
+  "author": {
+    "name": "ALK Development Team"
+  },
+  "license": "UNLICENSED"
+}

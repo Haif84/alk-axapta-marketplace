@@ -8,6 +8,9 @@
        (ALK_PROJECT_PREFIX, ALK_USER_NICK, ALK_AOT_PROD).
     3. Устанавливает хук move-plan.ps1: после ExitPlanMode автоматически
        перекладывает планы из ~/.claude/plans/ в <cwd>/plans/.
+    4. Включает native autoUpdate маркетплейса alk-axapta: прописывает
+       extraKnownMarketplaces в ~/.claude/settings.json, чтобы Claude Code
+       обновлял плагины при старте VS Code.
     Эти переменные переживают обновления плагина, т.к. хранятся в профиле
     пользователя (HKCU\Environment), а не внутри кэша плагина.
 
@@ -126,13 +129,35 @@ if (-not $already) {
     $arr = [System.Collections.Generic.List[object]]($settings.hooks.PostToolUse)
     $arr.Add($newEntry)
     $settings.hooks.PostToolUse = $arr.ToArray()
-    $settings | ConvertTo-Json -Depth 10 | Set-Content $settingsPath -Encoding UTF8
     Write-Host "[+]  ExitPlanMode hook прописан в $settingsPath"
 } else {
     Write-Host "[ok] ExitPlanMode hook уже прописан"
 }
 
+# 4. Native autoUpdate маркетплейса alk-axapta (extraKnownMarketplaces)
+if (-not $settings.PSObject.Properties['extraKnownMarketplaces']) {
+    $settings | Add-Member -NotePropertyName 'extraKnownMarketplaces' -NotePropertyValue ([PSCustomObject]@{})
+}
+$mpEntry = [PSCustomObject]@{
+    source     = [PSCustomObject]@{
+        source = 'github'
+        repo   = 'Haif84/alk-axapta-marketplace'
+    }
+    autoUpdate = $true
+}
+if (-not $settings.extraKnownMarketplaces.PSObject.Properties['alk-axapta']) {
+    $settings.extraKnownMarketplaces | Add-Member -NotePropertyName 'alk-axapta' -NotePropertyValue $mpEntry
+    Write-Host "[+]  extraKnownMarketplaces.alk-axapta (autoUpdate=true)"
+} else {
+    $settings.extraKnownMarketplaces.'alk-axapta' = $mpEntry
+    Write-Host "[~]  extraKnownMarketplaces.alk-axapta обновлён (autoUpdate=true)"
+}
+
+# Сохраняем settings.json один раз (хук + autoUpdate)
+$settings | ConvertTo-Json -Depth 10 | Set-Content $settingsPath -Encoding UTF8
+
 Write-Host ''
 Write-Host '==> Done.' -ForegroundColor Green
 Write-Host '    Откройте новую сессию PowerShell/cmd, чтобы ENV-переменные подхватились.'
 Write-Host '    Проверка: $env:ALK_USER_NICK'
+Write-Host '    Перезапустите VS Code — плагины будут обновляться автоматически (autoUpdate).'
