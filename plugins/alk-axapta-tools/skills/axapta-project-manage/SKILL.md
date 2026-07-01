@@ -140,7 +140,7 @@ sync-xpo --task-root .\xpo --bundle .\xpo\_release\SharedProject_*.xpo
 sync-xpo --task-root .\xpo --with-content-diff
 ```
 
-Если `--prod-root` не указан — берётся из ENV-переменной `ALK_AOT_PROD` (задаётся через `install\bootstrap.ps1`; по умолчанию `E:\ZeroCoder\Axapta\ERP\AOT-Prod`).
+Если `--prod-root` не указан — берётся из ENV-переменной `ALK_AOT_PROD` (задаётся через скилл `/alk-axapta-tools:setup`; по умолчанию `E:\ZeroCoder\Axapta\ERP\AOT-Prod`).
 
 Если `--bundle` не указан — автоматически берётся самый свежий `SharedProject_*.xpo` из `<task-root>/_release/`.
 

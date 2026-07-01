@@ -5,19 +5,20 @@ Microsoft Dynamics AX 2012 (ALK).
 
 ## Состав
 
-| Плагин | Назначение |
-|--------|------------|
-| `alk-axapta-tools`        | Скиллы Axapta + инструментарий XPOTools (см. ниже). |
-| `alk-hooks-plans2project` | Hook: после `ExitPlanMode` перекладывает планы из `~/.claude/plans/` в `<cwd>/plans/`. |
+| Плагин                | Назначение                                                                                                       |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `alk-axapta-tools`        | Скиллы Axapta + инструментарий XPOTools (см. ниже).                                              |
+| `alk-hooks-plans2project` | Hook: после`ExitPlanMode` перекладывает планы из `~/.claude/plans/` в `<cwd>/plans/`. Активируется сам при установке. |
 | `alk-self-update`         | Дневной cron-уведомитель о новых версиях (для долго открытых сессий). |
 
 Скиллы `alk-axapta-tools`:
 
-| Скилл | Назначение |
-|-------|------------|
+| Скилл                | Назначение                                                                                              |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `setup`                 | Разовая настройка ENV-переменных (ник, путь к AOT-Prod, префикс).       |
 | `axapta-mod-comments`   | Комментарии-маркеры модификаций в стиле ALK (X++, формы, таблицы). |
-| `axapta-project-export` | Сборка финального `.xpo`-бандла задачи для передачи заказчику. |
-| `axapta-project-manage` | Organize/flatten/sync/cleanup структуры папки `XPO/` задачи. |
+| `axapta-project-export` | Сборка финального`.xpo`-бандла задачи для передачи заказчику.   |
+| `axapta-project-manage` | Organize/flatten/sync/cleanup структуры папки`XPO/` задачи.                                 |
 
 XPOTools (Python-скрипты `build-shared-project`, `validate-xpo`, `organize-xpo` и др.)
 бандлируются внутри плагина — отдельная установка PATH не требуется.
@@ -26,22 +27,13 @@ XPOTools (Python-скрипты `build-shared-project`, `validate-xpo`, `organiz
 
 ## Установка (участник команды)
 
-### 1. Bootstrap — один раз на компьютере
+Клонировать репозиторий **не нужно** — всё ставится через нативные команды Claude Code.
 
-Клонировать репо и запустить:
+### 1. Добавить магазин
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\install\bootstrap.ps1 -UserNick <ваш_ник>
-# опционально (для sync-xpo с боевой выгрузкой):
-powershell -ExecutionPolicy Bypass -File .\install\bootstrap.ps1 -UserNick akaz -AotProd "E:\Axapta\AOT-Prod"
 ```
-
-Bootstrap:
-- записывает user-level ENV-переменные (`ALK_USER_NICK`, `ALK_AOT_PROD`, `ALK_PROJECT_PREFIX`) —
-  они переживают любые обновления плагина;
-- устанавливает hook `move-plan.ps1` (PostToolUse: ExitPlanMode);
-- **регистрирует магазин и включает `autoUpdate`** в `~/.claude/settings.json`
-  (`extraKnownMarketplaces.alk-axapta`). Отдельный `/plugin marketplace add` не нужен.
+/plugin marketplace add Haif84/alk-axapta-marketplace
+```
 
 ### 2. Установить нужные плагины
 
@@ -53,33 +45,58 @@ Bootstrap:
 
 ### 3. Перезапустить Claude Code
 
-Скиллы доступны сразу:
+После рестарта:
+
+- Hook `move-plan` (перекладка планов после `ExitPlanMode`) **уже активен** — он зашит в плагин
+  `alk-hooks-plans2project` (`hooks/hooks.json`), править `settings.json` вручную не нужно.
+- Скиллы доступны сразу:
 
 ```
+/alk-axapta-tools:setup
 /alk-axapta-tools:axapta-mod-comments
 /alk-axapta-tools:axapta-project-export
 /alk-axapta-tools:axapta-project-manage
 /alk-self-update:check-updates
 ```
 
+### 4. Разовая настройка ENV
+
+Запустите один раз — скилл спросит ник (и опц. путь к AOT-Prod) и запишет user-level
+ENV-переменные (`ALK_USER_NICK`, `ALK_AOT_PROD`, `ALK_PROJECT_PREFIX`). Они переживают любые
+обновления плагина.
+
+```
+/alk-axapta-tools:setup
+```
+
+После настройки перезапустите VS Code, чтобы переменные подхватились. Проверка: `$env:ALK_USER_NICK`.
+
 ---
 
 ## Обновление
 
-**Автоматически.** Благодаря `autoUpdate` Claude Code при каждом старте VS Code обновляет
-маркетплейс и установленные плагины. Если что-то обновилось — появится подсказка выполнить
-`/reload-plugins` (без перезапуска).
+**Уведомление в открытой сессии (основной механизм).** Плагин `alk-self-update` ставит durable
+cron, который раз в день проверяет репо прямо во время работы — даже если VS Code не
+перезапускается сутками — и присылает `PushNotification`, когда есть новая версия. Включить один
+раз:
 
-**Вручную (сразу):**
+```
+/alk-self-update:check-updates
+```
+
+(достаточно вызвать однократно — скилл сам поставит ежедневный cron).
+
+**Применить обновление сейчас:**
 
 ```
 /plugin marketplace update alk-axapta
 /reload-plugins
 ```
 
-**Долгие сессии.** Если VS Code не перезапускается сутками, плагин `alk-self-update` раз в день
-проверяет репо и присылает уведомление о новой версии. Запустить проверку вручную:
-`/alk-self-update:check-updates`.
+**Опционально — автообновление на рестарте.** Если хотите, чтобы обновления не только
+уведомлялись, но и ставились сами при старте VS Code, включите auto-update для магазина один раз:
+`/plugin` → вкладка **Marketplaces** → выбрать `alk-axapta` → **Enable auto-update**. Для
+сторонних магазинов автообновление по умолчанию выключено, поэтому этот тумблер — ручной шаг.
 
 ---
 
@@ -87,11 +104,13 @@ Bootstrap:
 
 ### Выкатить обновление
 
-1. Правки в `plugins/<plugin>/skills/` или `.../scripts/`.
+1. Правки в `plugins/<plugin>/skills/`, `.../scripts/` или `.../hooks/`.
 2. Увеличить `"version"` в `plugins/<plugin>/.claude-plugin/plugin.json`
    **и** в соответствующей записи `.claude-plugin/marketplace.json`.
 3. `git commit` + `git push` в `master`.
-4. У команды обновление прилетит на следующем старте VS Code (autoUpdate).
+4. Команда получит `PushNotification` от `alk-self-update` (в открытой сессии) либо подхватит
+   обновление на старте VS Code, если включён auto-update тумблер. Применяется через
+   `/plugin marketplace update alk-axapta` + `/reload-plugins`.
 
 ### Синхронизация XPOTools
 
@@ -113,15 +132,16 @@ alk-axapta-marketplace/
 ├── plugins/
 │   ├── alk-axapta-tools/
 │   │   ├── .claude-plugin/plugin.json
-│   │   ├── skills/                   # axapta-mod-comments, -project-export, -project-manage
-│   │   └── scripts/XPOTools/
+│   │   ├── skills/                   # setup, axapta-mod-comments, -project-export, -project-manage
+│   │   └── scripts/
+│   │       ├── setup-env.ps1         # bundled: пишет ENV (вызывается скиллом setup)
+│   │       └── XPOTools/
 │   ├── alk-hooks-plans2project/
 │   │   ├── .claude-plugin/plugin.json
+│   │   ├── hooks/hooks.json          # нативная регистрация PostToolUse: ExitPlanMode
 │   │   └── scripts/hooks/move-plan.ps1
 │   └── alk-self-update/
 │       ├── .claude-plugin/plugin.json
 │       └── skills/check-updates/SKILL.md
-├── install/
-│   └── bootstrap.ps1
 └── README.md
 ```

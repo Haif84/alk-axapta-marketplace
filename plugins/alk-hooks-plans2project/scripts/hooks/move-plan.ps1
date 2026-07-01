@@ -1,5 +1,6 @@
 # Move recent plan files from ~/.claude/plans/ to <cwd>/plans/.
-# Triggered by PostToolUse hook on ExitPlanMode (see ~/.claude/settings.json).
+# Triggered by PostToolUse hook on ExitPlanMode (registered natively via
+# the plugin's hooks/hooks.json — no settings.json edit required).
 # Reads cwd from stdin JSON (Claude Code hook protocol).
 
 $ErrorActionPreference = 'Stop'

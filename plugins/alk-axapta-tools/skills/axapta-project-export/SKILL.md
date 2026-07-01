@@ -435,7 +435,7 @@ split-shared-project <project>\XPO\_release\SharedProject_*.xpo --out <project>\
 - **Не игнорируй mojibake-warning** валидатора. Ð/Ñ/â„– в .xpo — это сломанная кодировка, после импорта в AX русские комментарии превратятся в мусор и метаданные тоже могут поехать. Сначала `fix-mojibake`, потом сборка.
 - **Не пропускай запись в `docs/CHANGES.md`** после сборки. Файлы в `_release/` хранят только timestamp в имени; без записи в CHANGES.md через месяц нельзя понять, что было в каждом релизе.
 - **Не переписывай build-скрипт под захардкоженные значения тикета** (старая привычка из `_build_shared_project.py` в `LT_DAX-12135/docs/templates/`). Используй CLI-флаги `--project-name`, `--guid`, `--dt-stamp`. Хардкод дрейфует, а универсальный сборщик идёт в общий git-репо `XPOTools/` и улучшается централизованно.
-- **Не зашивай локальные пути в код** (например `E:\ZeroCoder\LT_*\XPO`). Все ALK-специфичные значения — через ENV-переменные `ALK_PROJECT_PREFIX`/`ALK_USER_NICK`/`ALK_AOT_PROD` (задаются один раз через `install\bootstrap.ps1`).
+- **Не зашивай локальные пути в код** (например `E:\ZeroCoder\LT_*\XPO`). Все ALK-специфичные значения — через ENV-переменные `ALK_PROJECT_PREFIX`/`ALK_USER_NICK`/`ALK_AOT_PROD` (задаются один раз через скилл `/alk-axapta-tools:setup`).
 - **Не запускай `organize-xpo` непосредственно перед `build-shared-project` без `validate-xpo`.** Правильный порядок: organize → validate-xpo --strict (в т.ч. layout-consistency check) → build. Если layout-consistency находит несоответствие — это значит organize ошибся, и в бандле объект окажется не в той группе.
 
 ## Workflow с разработчиком

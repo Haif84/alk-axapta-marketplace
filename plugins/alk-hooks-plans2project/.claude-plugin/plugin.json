@@ -1,7 +1,7 @@
 {
   "name": "alk-hooks-plans2project",
-  "description": "Hook: после ExitPlanMode автоматически перекладывает планы из ~/.claude/plans/ в <cwd>/plans/. Установка через bootstrap.ps1.",
-  "version": "1.0.0",
+  "description": "Hook: после ExitPlanMode автоматически перекладывает планы из ~/.claude/plans/ в <cwd>/plans/. Активируется сам при установке плагина (hooks/hooks.json).",
+  "version": "2.0.0",
   "author": {
     "name": "ALK Development Team"
   },
