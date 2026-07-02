@@ -160,8 +160,8 @@ ENDSOURCE
    - Сразу нормализовать полученный код: canonical-settings (`PREFIX-N`) → хранить; canonical-comment (`PREFIX_NNNNNN`) → применять в маркерах.
 3. Сохрани новые/обновлённые параметры в memory (типы `project` и `user`). Код модификации хранить в **canonical-settings форме** (дефис, без ведущих нулей).
 4. **Проверь конвенцию именования** (до первого нового идентификатора):
-   - Прочитай `XPOTools/config.local.json` — поля `ALK_IDENTIFIER_PREFIX` и `ALK_IDENTIFIER_SUFFIX`.
-   - Если поля отсутствуют — спроси через `AskUserQuestion` (тип: prefix/suffix/нет; значение в lowercase), запиши в `config.local.json`.
+   - Источник аффикса по приоритету: **ENV** `ALK_IDENTIFIER_PREFIX`/`ALK_IDENTIFIER_SUFFIX` (их пишет `/alk-axapta-tools:setup`, переживают обновления) → затем `XPOTools/config.local.json`.
+   - Если ни ENV, ни поля в config нет — спроси через `AskUserQuestion` (тип: prefix/suffix/нет; значение в lowercase). Предпочтительно попроси пользователя выполнить `/alk-axapta-tools:setup` (ENV переживёт обновление плагина); как временный вариант — запиши в `config.local.json`.
    - Запомни на сессию: **новые AOT-объекты** → `UPPER_PREFIX_` (например `ALK_`); **методы/переменные/параметры в существующих** → `lower_prefix_` (например `alk_`).
 5. Применяй шаблоны комментариев при каждом `Edit` / `Write`; именуй по двухуровневому правилу из п. 4.
 
@@ -174,7 +174,11 @@ ENDSOURCE
 
 **Ключевое правило**: если контейнер (класс/таблица/форма) уже является ALK_*-объектом (создан в рамках проекта) — дополнительный аффикс на методы и переменные внутри него **не нужен**.
 
-### Глобальная настройка (config.local.json)
+### Глобальная настройка (ENV или config.local.json)
+
+Источник значений по приоритету: **ENV-переменные** `ALK_IDENTIFIER_PREFIX` / `ALK_IDENTIFIER_SUFFIX`
+(их пишет `/alk-axapta-tools:setup`, переживают обновления плагина) → затем `config.local.json`
+(лежит в кэше плагина, стирается при обновлении):
 
 ```json
 {
@@ -188,7 +192,8 @@ ENDSOURCE
 | `ALK_IDENTIFIER_PREFIX` | `"alk_"` | Аффикс для методов/переменных/параметров в **существующих** объектах (lowercase + `_`) |
 | `ALK_IDENTIFIER_SUFFIX` | `""` | Постфикс (альтернатива PREFIX). Пусто = не используется |
 
-Если оба поля пусты — конвенция не применяется. Prefix и suffix не должны быть заданы одновременно.
+Если оба источника пусты — конвенция не применяется. Prefix и suffix не должны быть заданы одновременно.
+**Рекомендуется** задавать аффикс через `/alk-axapta-tools:setup` (ENV), а не через `config.local.json`.
 
 **Деривация аффикса для новых AOT-объектов**: взять `ALK_IDENTIFIER_PREFIX`, привести к UPPER, убедиться что оканчивается на `_` → `ALK_`. Если `ALK_IDENTIFIER_PREFIX` пусто — взять первый сегмент `ALK_PROJECT_PREFIX` до `_` в UPPER + `_` (например `ALK_DEVAX12` → `ALK_`).
 
@@ -211,15 +216,15 @@ ENDSOURCE
 
 **До первого `Edit`/`Write`** с новым идентификатором:
 
-1. Прочитай `config.local.json` (поля `ALK_IDENTIFIER_PREFIX` / `ALK_IDENTIFIER_SUFFIX`).
-2. Если поля **отсутствуют** — спроси через `AskUserQuestion`:
+1. Определи аффикс по приоритету: **ENV** `ALK_IDENTIFIER_PREFIX` / `ALK_IDENTIFIER_SUFFIX` → затем `config.local.json` (те же поля).
+2. Если аффикс **не задан** ни в ENV, ни в config — спроси через `AskUserQuestion`:
    - Тип аффикса: `prefix` / `suffix` / не используется
    - Значение в нижнем регистре (например `alk_`) — он же используется для методов/переменных/параметров; для новых AOT-объектов автоматически берётся UPPER-версия (`ALK_`)
-   - Запиши оба поля в `config.local.json`.
-3. Если поля **есть** — применяй молча, без переспроса:
+   - Предложи закрепить через `/alk-axapta-tools:setup` (ENV переживёт обновление); как временный вариант запиши оба поля в `config.local.json`.
+3. Если аффикс **есть** — применяй молча, без переспроса:
    - новые AOT-объекты → `UPPER(ALK_IDENTIFIER_PREFIX)` → `ALK_`
    - методы/переменные/параметры в существующих → `ALK_IDENTIFIER_PREFIX` → `alk_`
-4. Если в memory (`feedback_alk_naming_convention.md`) значение расходится с `config.local.json` — доверяй `config.local.json`.
+4. Приоритет при расхождениях: ENV > `config.local.json` > memory (`feedback_alk_naming_convention.md`).
 
 ## Anti-patterns — чего НЕ делать
 

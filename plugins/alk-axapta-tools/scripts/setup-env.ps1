@@ -5,11 +5,14 @@
 .DESCRIPTION
     Записывает user-level ENV-переменные (HKCU\Environment), которые XPOTools
     читает приоритетно, а скиллы используют как значения по умолчанию:
-      - ALK_USER_NICK      — ник разработчика (комментарии модификаций)
-      - ALK_AOT_PROD       — путь к боевой выгрузке AOT-Prod (для sync-xpo)
-      - ALK_PROJECT_PREFIX — префикс проектов ALK (по умолчанию ALK_DEVAX12)
+      - ALK_USER_NICK          — ник разработчика (комментарии модификаций)
+      - ALK_AOT_PROD           — путь к боевой выгрузке AOT-Prod (для sync-xpo)
+      - ALK_PROJECT_PREFIX     — префикс проектов ALK (по умолчанию ALK_DEVAX12)
+      - ALK_IDENTIFIER_PREFIX  — аффикс новых идентификаторов (lowercase, напр. alk_)
+      - ALK_IDENTIFIER_SUFFIX  — постфикс-альтернатива PREFIX (обычно пусто)
     Переменные хранятся в профиле пользователя и переживают любые обновления
-    плагина. Права администратора не нужны.
+    плагина. Права администратора не нужны. ENV имеет приоритет над
+    config.local.json (который лежит в кэше плагина и стирается при обновлении).
 
     Дополнительно проверяет наличие Python >= 3.9 (нужен для XPOTools).
 
@@ -23,9 +26,18 @@
 .PARAMETER ProjectPrefix
     Префикс проектов ALK. По умолчанию ALK_DEVAX12.
 
+.PARAMETER IdentifierPrefix
+    Аффикс новых идентификаторов в нижнем регистре (напр. alk_). Применяется к
+    методам/переменным/параметрам в существующих объектах; для новых AOT-объектов
+    берётся UPPER-версия (ALK_). Пусто = конвенция именования не применяется.
+
+.PARAMETER IdentifierSuffix
+    Постфикс-альтернатива IdentifierPrefix. Обычно пусто. Не задавайте вместе с
+    IdentifierPrefix.
+
 .EXAMPLE
     powershell -NoProfile -ExecutionPolicy Bypass -File setup-env.ps1 -UserNick akaz
-    powershell -NoProfile -ExecutionPolicy Bypass -File setup-env.ps1 -UserNick akaz -AotProd "E:\Axapta\AOT-Prod"
+    powershell -NoProfile -ExecutionPolicy Bypass -File setup-env.ps1 -UserNick akaz -AotProd "E:\Axapta\AOT-Prod" -IdentifierPrefix alk_
 #>
 
 [CmdletBinding()]
@@ -35,7 +47,11 @@ param(
 
     [string]$AotProd = '',
 
-    [string]$ProjectPrefix = 'ALK_DEVAX12'
+    [string]$ProjectPrefix = 'ALK_DEVAX12',
+
+    [string]$IdentifierPrefix = '',
+
+    [string]$IdentifierSuffix = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -77,9 +93,15 @@ function Set-UserEnv {
     }
 }
 
-Set-UserEnv 'ALK_PROJECT_PREFIX' $ProjectPrefix
-Set-UserEnv 'ALK_USER_NICK'      $UserNick
-Set-UserEnv 'ALK_AOT_PROD'       $AotProd
+if ($IdentifierPrefix -and $IdentifierSuffix) {
+    Write-Warning "IdentifierPrefix и IdentifierSuffix заданы одновременно — используйте что-то одно. Записываю оба как есть."
+}
+
+Set-UserEnv 'ALK_PROJECT_PREFIX'    $ProjectPrefix
+Set-UserEnv 'ALK_USER_NICK'         $UserNick
+Set-UserEnv 'ALK_AOT_PROD'          $AotProd
+Set-UserEnv 'ALK_IDENTIFIER_PREFIX' $IdentifierPrefix
+Set-UserEnv 'ALK_IDENTIFIER_SUFFIX' $IdentifierSuffix
 
 Write-Host ''
 Write-Host '==> Done.' -ForegroundColor Green
