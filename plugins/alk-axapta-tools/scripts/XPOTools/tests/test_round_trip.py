@@ -74,10 +74,12 @@ def run(cmd, **kw):
 
 
 def t1_build_split_round_trip(workdir: pathlib.Path) -> None:
-    print("[T1] build → split round-trip")
+    print("[T1] build → split round-trip (AOT layout — канонический с 2026-07-03)")
     xpo_dir = workdir / "XPO"
-    xpo_dir.mkdir(parents=True)
-    src = xpo_dir / "Class_ALK_TestClass.xpo"
+    class_dir = xpo_dir / "Classes"
+    class_dir.mkdir(parents=True)
+    # AOT-layout: без file_prefix, в подпапке по типу (dir_path_for("CLS") == ("Classes",)).
+    src = class_dir / "ALK_TestClass.xpo"
     write_xpo(src, CLASS_XPO)
 
     res = run([
@@ -98,10 +100,11 @@ def t1_build_split_round_trip(workdir: pathlib.Path) -> None:
         PYTHON, "-m", "Modules.split_shared_project",
         str(bundle),
         "--out", str(out_dir),
+        "--layout", "aot",
     ], cwd=ROOT)
     assert res.returncode == 0, f"split failed:\n{res.stdout}\n{res.stderr}"
 
-    rebuilt = out_dir / "Class_ALK_TestClass.xpo"
+    rebuilt = out_dir / "Classes" / "ALK_TestClass.xpo"
     assert rebuilt.exists(), f"split did not produce {rebuilt}"
     assert src.read_bytes() == rebuilt.read_bytes(), "round-trip byte-equal failed"
     print("    OK")

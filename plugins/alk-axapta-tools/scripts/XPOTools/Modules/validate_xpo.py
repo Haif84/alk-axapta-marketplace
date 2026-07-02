@@ -8,6 +8,9 @@
   4. Наличие маркеров axapta-mod-comments (`//<PREFIX>...` или `#//<PREFIX>...`
      внутри SOURCE) хотя бы один раз в каждом .xpo с исключением Resource/LabelFile.
   5. Уникальность имён объектов между .xpo (две CLS с одним именем = ошибка).
+  6. Layout-consistency (только для директории): AOT-раскладка обязательна —
+     плоский корень даёт WARN (валит только --strict), файл не в той AOT-подпапке
+     для своего типа — ERROR (всегда).
 
 Запуск:
     python -m Modules.validate_xpo <file_or_dir> [--strict]
@@ -244,8 +247,14 @@ def check_layout_consistency(
     mnemonic: str,
     text: str,
 ) -> List[Issue]:
-    """Если файл лежит в подпапке внутри root, его mnemonic должен соответствовать
-    ожидаемому dir_path. Для плоского корня (path.parent == root) — OK (legacy)."""
+    """AOT-раскладка обязательна для финальной структуры (см. axapta-project-export
+    SKILL.md §«Папка XPO/ обязательна»). Два случая:
+      - плоский корень (файл прямо в root, без AOT-подпапки) — WARN: задача ещё не
+        organize-нута. WARN, а не ERROR, чтобы --strict не начал внезапно проваливать
+        уже идущие задачи с плоским layout при обновлении плагина — без --strict
+        не влияет на exit code вообще.
+      - файл лежит в подпапке, но не в той, что ожидается для его типа — ERROR:
+        обычно значит, что organize-xpo (или ручной перенос) ошибся."""
     if not mnemonic:
         return []
     try:
@@ -253,9 +262,6 @@ def check_layout_consistency(
     except ValueError:
         return []
     parent_parts = rel.parts[:-1]
-    if not parent_parts:
-        # Плоский корень — пропускаем (legacy layout).
-        return []
 
     effective = mnemonic
     if effective == "FTM":
@@ -275,6 +281,16 @@ def check_layout_consistency(
     expected = dir_path_for(effective)
     if not expected:
         return []
+
+    if not parent_parts:
+        return [Issue(
+            str(path),
+            "WARN",
+            f"flat layout: file lies directly in {root.name}/, but AOT layout "
+            f"expects {'/'.join(expected)}/ — run organize-xpo organize "
+            f"--root <XPO/> before release",
+        )]
+
     if parent_parts == expected:
         return []
     return [Issue(
