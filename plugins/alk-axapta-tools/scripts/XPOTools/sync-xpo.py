@@ -24,7 +24,7 @@ from typing import Dict, List, Optional, Set, Tuple
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent / "Modules"))
 from xpo_types import XPO_TYPES  # noqa: E402
-from config import load_config  # noqa: E402
+from config import load_config, validate_config, print_config_warnings  # noqa: E402
 
 if sys.platform == "win32":
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
@@ -202,12 +202,13 @@ def short_content_diff(task_file: pathlib.Path, prod_file: pathlib.Path, max_lin
 
 
 def main() -> int:
+    print_config_warnings(validate_config())
     cfg = load_config()
     parser = argparse.ArgumentParser(prog="sync-xpo",
         description="Сверка xpo задачи с боевой AOT-Prod (read-only)")
     parser.add_argument("--task-root", required=True, help="папка задачи XPO/")
-    parser.add_argument("--prod-root", default=cfg.get("ALK_AOT_PROD", ""),
-                        help="папка AOT-Prod (по умолчанию из config.local.json ALK_AOT_PROD)")
+    parser.add_argument("--prod-root", default=cfg.get("AX_AOT_PATH", ""),
+                        help="папка AOT-Prod (по умолчанию из AX_AOT_PATH)")
     parser.add_argument("--bundle", default=None,
                         help="бандл из _release/ (по умолчанию: самый свежий)")
     parser.add_argument("--with-content-diff", action="store_true",
@@ -223,7 +224,7 @@ def main() -> int:
     if not prod_root or not prod_root.is_dir():
         print(
             "ERROR: --prod-root не указан или не существует. "
-            "Укажи через флаг или ALK_AOT_PROD в config.local.json.",
+            "Укажи через флаг или AX_AOT_PATH (см. /alk-axapta-tools:setup).",
             file=sys.stderr,
         )
         return 2

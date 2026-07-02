@@ -20,7 +20,7 @@ from typing import Dict, List, Tuple
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent / "Modules"))
 from xpo_types import XPO_TYPES, detect_menuitem_subtype  # noqa: E402
-from config import load_config, check_config, print_config_warnings  # noqa: E402
+from config import load_config, validate_config, print_config_warnings  # noqa: E402
 
 if sys.platform == "win32":
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
@@ -381,7 +381,7 @@ def collect_objects(root: pathlib.Path) -> List[Dict]:
 
 
 def main() -> int:
-    print_config_warnings(check_config())
+    print_config_warnings(validate_config())
     cfg = load_config()
     parser = argparse.ArgumentParser(description="Сборка SharedProject_*.xpo")
     parser.add_argument("--root", default=str(pathlib.Path.cwd() / "XPO"),
@@ -401,7 +401,7 @@ def main() -> int:
 
     project_name = args.project_name
     if not project_name:
-        prefix = cfg.get("ALK_PROJECT_PREFIX", "")
+        prefix = cfg.get("AX_PROJECT_ID", "")
         if not prefix or "<" in prefix:
             print("ERROR: --project-name не указан и не выводится из config", file=sys.stderr)
             return 2

@@ -27,7 +27,7 @@ from typing import Dict, List, Optional, Tuple
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from xpo_types import XPO_TYPES, NO_MARKER_REQUIRED, dir_path_for  # noqa: E402
-from config import load_config, check_config, print_config_warnings  # noqa: E402
+from config import load_config, validate_config, print_config_warnings  # noqa: E402
 
 if sys.platform == "win32":
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
@@ -324,7 +324,7 @@ def validate_one(
 
 
 def main() -> int:
-    print_config_warnings(check_config())
+    print_config_warnings(validate_config())
     cfg = load_config()
     parser = argparse.ArgumentParser(description="Валидатор xpo-файлов")
     parser.add_argument("target", help="Файл или директория")
@@ -337,7 +337,7 @@ def main() -> int:
         print(f"ERROR: нет .xpo файлов в {target}", file=sys.stderr)
         return 2
 
-    prefix = cfg.get("ALK_PROJECT_PREFIX", "") or ""
+    prefix = cfg.get("AX_PROJECT_ID", "") or ""
     if "<" in prefix:
         prefix = ""
 

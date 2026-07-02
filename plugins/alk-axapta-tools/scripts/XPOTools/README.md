@@ -16,16 +16,23 @@ Microsoft Dynamics AX 2012 (X++).
 
 ## Установка
 
+Через плагин `alk-axapta-tools` (основной путь) — конфигурация задаётся ENV-переменными
+через скилл `/alk-axapta-tools:setup` (см. `../setup-env.ps1`), PATH не требуется — команды
+вызываются через полный путь `${CLAUDE_PLUGIN_ROOT}/scripts/XPOTools/...`.
+
+Standalone-клон (вне плагина):
+
 ```powershell
 git clone <repo-url> "$env:USERPROFILE\.claude\scripts\XPOTools"
 cd "$env:USERPROFILE\.claude\scripts\XPOTools"
-.\setup.ps1
-notepad config.local.json   # заполни ALK_USER_NICK и т.п.
+Copy-Item config.example.json config.local.json
+notepad config.local.json   # заполни AX_USER_NICK и т.п.
 ```
 
-`setup.ps1` добавляет `XPOTools/bin` в user-level `$env:PATH` (через `HKCU\Environment`, без admin) и создаёт `config.local.json` из `config.example.json`.
-
-После установки — открой новую сессию PowerShell, чтобы PATH подхватился. Команды `build-shared-project --help` и т.д. должны работать без указания полного пути.
+Автоматического добавления `XPOTools/bin` в PATH сейчас нет (ранее это делал `setup.ps1`,
+удалён как неиспользуемый и оставлявший ложное впечатление, что PATH настраивается сам —
+известное открытое ограничение). Пока не восстановлено — вызывай команды через полный путь
+или добавь `bin/` в `$env:PATH` вручную.
 
 ## Обновление
 
@@ -40,9 +47,15 @@ cd "$env:USERPROFILE\.claude\scripts\XPOTools"
 
 Источники значений по убыванию приоритета:
 
-1. Переменные окружения `ALK_PROJECT_PREFIX`, `ALK_USER_NICK`, `ALK_AOT_PROD`.
+1. Переменные окружения `AX_PROJECT_ID`, `AX_USER_NICK`, `AX_AOT_PATH`, `AX_OBJECT_PREFIX`,
+   `AX_OBJECT_SUFFIX`.
 2. `config.local.json` (gitignored).
-3. `config.example.json` (под git, плейсхолдеры).
+3. `config.example.json` (под git, плейсхолدеры).
+
+Все пять ключей обязательны (`AX_OBJECT_PREFIX`/`AX_OBJECT_SUFFIX` — ровно один из двух);
+`Modules/config.py` вызванный напрямую (`python Modules/config.py`) проверяет это и
+возвращает ненулевой exit code при неполной конфигурации — используется как preflight-гейт
+в скиллах плагина.
 
 В коде нет ALK-специфичных литералов — всё через [Modules/config.py](Modules/config.py).
 
@@ -85,7 +98,6 @@ XPOTools/
 ├── tests/                      ← smoke-тесты
 ├── config.example.json         ← шаблон конфига (под git)
 ├── config.local.json           ← локальные значения (gitignored)
-├── setup.ps1
 ├── update.ps1
 └── .gitignore
 ```
