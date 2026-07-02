@@ -1,8 +1,8 @@
 {
-  "ALK_PROJECT_PREFIX": "ALK_DEVAX12",
-  "ALK_USER_NICK": "<your_nick>",
-  "ALK_AOT_PROD": "<path_to_AOT-Prod_or_empty>",
-  "ALK_IDENTIFIER_PREFIX": "alk_",
-  "ALK_IDENTIFIER_PREFIX_HINT": "lowercase for methods/vars/params in existing objects (e.g. alk_); UPPERCASE auto-derived for new AOT elements (e.g. ALK_)",
-  "ALK_IDENTIFIER_SUFFIX": ""
+  "AX_PROJECT_ID": "ALK_DEVAX12",
+  "AX_USER_NICK": "<your_nick>",
+  "AX_AOT_PATH": "<path_to_AOT-Prod>",
+  "AX_OBJECT_PREFIX": "alk_",
+  "AX_OBJECT_PREFIX_HINT": "lowercase for methods/vars/params in existing objects (e.g. alk_); UPPERCASE auto-derived for new AOT elements (e.g. ALK_). Ровно один из AX_OBJECT_PREFIX/AX_OBJECT_SUFFIX должен быть непустым.",
+  "AX_OBJECT_SUFFIX": ""
 }

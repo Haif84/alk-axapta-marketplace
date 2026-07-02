@@ -61,15 +61,17 @@ XPOTools (Python-скрипты `build-shared-project`, `validate-xpo`, `organiz
 
 ### 4. Разовая настройка ENV
 
-Запустите один раз — скилл спросит ник (и опц. путь к AOT-Prod) и запишет user-level
-ENV-переменные (`ALK_USER_NICK`, `ALK_AOT_PROD`, `ALK_PROJECT_PREFIX`). Они переживают любые
+Запустите один раз — скилл спросит ник, путь к AOT-Prod, ID проекта и аффикс именования
+(prefix ИЛИ suffix — ровно один) и запишет user-level ENV-переменные (`AX_USER_NICK`,
+`AX_AOT_PATH`, `AX_PROJECT_ID`, `AX_OBJECT_PREFIX`/`AX_OBJECT_SUFFIX`). Все пять обязательны —
+без них остальные скиллы плагина откажутся работать (preflight-гейт). Переживают любые
 обновления плагина.
 
 ```
 /alk-axapta-tools:setup
 ```
 
-После настройки перезапустите VS Code, чтобы переменные подхватились. Проверка: `$env:ALK_USER_NICK`.
+После настройки перезапустите VS Code, чтобы переменные подхватились. Проверка: `$env:AX_USER_NICK`.
 
 ---
 
