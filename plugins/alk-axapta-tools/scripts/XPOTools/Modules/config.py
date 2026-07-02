@@ -1,7 +1,8 @@
 """Конфигурация XPOTools.
 
 Источники значений (по убыванию приоритета):
-  1. Переменные окружения ALK_PROJECT_PREFIX, ALK_USER_NICK, ALK_AOT_PROD
+  1. Переменные окружения ALK_PROJECT_PREFIX, ALK_USER_NICK, ALK_AOT_PROD,
+     ALK_IDENTIFIER_PREFIX, ALK_IDENTIFIER_SUFFIX
   2. <XPOTools>/config.local.json (gitignored)
   3. <XPOTools>/config.example.json (под git, плейсхолдеры)
 
@@ -15,7 +16,13 @@ import json
 import os
 import pathlib
 
-KEYS = ("ALK_PROJECT_PREFIX", "ALK_USER_NICK", "ALK_AOT_PROD")
+KEYS = (
+    "ALK_PROJECT_PREFIX",
+    "ALK_USER_NICK",
+    "ALK_AOT_PROD",
+    "ALK_IDENTIFIER_PREFIX",
+    "ALK_IDENTIFIER_SUFFIX",
+)
 
 _ROOT = pathlib.Path(__file__).resolve().parent.parent  # XPOTools/
 
