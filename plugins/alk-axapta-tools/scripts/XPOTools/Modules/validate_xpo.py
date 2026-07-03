@@ -11,10 +11,12 @@
   6. Layout-consistency (только для директории): AOT-раскладка обязательна —
      плоский корень даёт WARN (валит только --strict), файл не в той AOT-подпапке
      для своего типа — ERROR (всегда).
-  7. Зарезервированные слова X++ (Modules/reserved_words.py) в роли имени поля
-     classDeclaration/tableFieldsDeclaration или параметра метода — WARN. Не
-     проверяет произвольные локальные переменные внутри тела метода (риск
-     ложных срабатываний на обычных операторах вида `return foo;`).
+  7. Зарезервированные слова X++ (Modules/reserved_words.py) в роли имени
+     параметра метода или локальной переменной — WARN. Поля classDeclaration/
+     tableFieldsDeclaration намеренно НЕ проверяются. Локальные переменные
+     детектируются только в начале тела метода (блок объявлений сразу после
+     `{`, до первого исполняемого оператора) — не цепляет обычные операторы
+     вида `return foo;`.
 
 Запуск:
     python -m Modules.validate_xpo <file_or_dir> [--strict]
@@ -196,8 +198,8 @@ def check_source_block_wrapping(path: pathlib.Path, text: str, prefix: str) -> L
     return issues
 
 
-FIELD_DECL_RE = re.compile(
-    r"^\s*(?:private|public|protected)?\s*[A-Za-z_][\w.]*(?:\s*\[\s*\])?\s+"
+DECL_RE = re.compile(
+    r"^\s*[A-Za-z_][\w.]*(?:\s*\[\s*\])?\s+"
     r"([A-Za-z_]\w*)\s*(?:=.*)?;"
 )
 SIGNATURE_RE = re.compile(
@@ -208,13 +210,18 @@ PARAM_RE = re.compile(r"^[A-Za-z_][\w.\[\]]*\s+([A-Za-z_]\w*)\s*(?:=.*)?$")
 
 
 def check_reserved_identifiers(path: pathlib.Path, text: str) -> List[Issue]:
-    """WARN, если имя поля classDeclaration/tableFieldsDeclaration или параметра
-    метода — зарезервированное слово X++ (см. Modules/reserved_words.py):
-    компилятор AX выдаст синтаксическую ошибку при попытке скомпилировать такое
-    объявление. Не проверяет произвольные локальные переменные внутри тела
-    метода — там высок риск ложных срабатываний на обычных операторах
-    (`return foo;`, `select foo;`), где первый токен — само ключевое слово,
-    а не тип."""
+    """WARN, если имя параметра метода или локальной переменной — зарезервированное
+    слово X++ (см. Modules/reserved_words.py): компилятор AX выдаст синтаксическую
+    ошибку при попытке скомпилировать такое объявление. Поля classDeclaration /
+    tableFieldsDeclaration намеренно НЕ проверяются — это осознанное решение
+    (в отличие от локальных переменных/параметров).
+
+    Локальные переменные детектируются только в начале тела метода: сканирование
+    останавливается на первой строке, не похожей на объявление (`TYPE name;`) —
+    по конвенции ALK объявления идут единым блоком сразу после `{`, до первого
+    исполняемого оператора. Это специально ограничивает область поиска, чтобы не
+    цеплять обычные операторы вида `return foo;`/`select foo;`, где первый токен —
+    само ключевое слово, а не тип."""
     issues: List[Issue] = []
     lines = text.splitlines()
     source_re = re.compile(r"^\s*SOURCE\s+#(\S+)\s*$")
@@ -225,23 +232,24 @@ def check_reserved_identifiers(path: pathlib.Path, text: str) -> List[Issue]:
             i += 1
             continue
         method_name = m.group(1)
-        in_field_block = method_name in ("classDeclaration", "tableFieldsDeclaration")
+        if method_name in ("classDeclaration", "tableFieldsDeclaration"):
+            # Поля не проверяем — только переменные/параметры методов.
+            i += 1
+            while i < len(lines) and lines[i].strip() != "ENDSOURCE":
+                i += 1
+            continue
         signature_checked = False
+        declarations_open = False
         i += 1
         while i < len(lines):
-            stripped = lines[i].strip()
-            if stripped == "ENDSOURCE":
+            if lines[i].strip() == "ENDSOURCE":
                 break
+            # Строки внутри SOURCE-блока в .xpo предварены символом `#` (иногда с
+            # отступом перед ним) — сравнивать нужно очищенный контент, не сырую
+            # строку, иначе `#{`/`#` (пустая строка)/`#    ;` не совпадут с "{"/""/";" .
             content = re.sub(r"^\s*#", "", lines[i])
-            if in_field_block:
-                fm = FIELD_DECL_RE.match(content)
-                if fm and fm.group(1).lower() in RESERVED_WORDS:
-                    issues.append(Issue(
-                        str(path), "WARN",
-                        f"SOURCE #{method_name}: field '{fm.group(1)}' is a "
-                        f"reserved X++ word — AX will reject this declaration",
-                    ))
-            elif not signature_checked and content.strip() and "(" in content:
+            content_stripped = content.strip()
+            if not signature_checked and content_stripped and "(" in content:
                 signature_checked = True
                 sm = SIGNATURE_RE.match(content)
                 if sm:
@@ -256,6 +264,28 @@ def check_reserved_identifiers(path: pathlib.Path, text: str) -> List[Issue]:
                                 f"SOURCE #{method_name}: parameter '{pm.group(1)}' is "
                                 f"a reserved X++ word — AX will reject this declaration",
                             ))
+                i += 1
+                continue
+            if signature_checked:
+                if content_stripped == "{":
+                    declarations_open = True
+                    i += 1
+                    continue
+                if declarations_open:
+                    if content_stripped == "" or content_stripped == ";":
+                        i += 1
+                        continue
+                    dm = DECL_RE.match(content)
+                    if not dm:
+                        declarations_open = False
+                        i += 1
+                        continue
+                    if dm.group(1).lower() in RESERVED_WORDS:
+                        issues.append(Issue(
+                            str(path), "WARN",
+                            f"SOURCE #{method_name}: local variable '{dm.group(1)}' is "
+                            f"a reserved X++ word — AX will reject this declaration",
+                        ))
             i += 1
     return issues
 
