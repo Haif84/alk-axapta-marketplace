@@ -199,9 +199,13 @@ def check_source_block_wrapping(path: pathlib.Path, text: str, prefix: str) -> L
 
 
 DECL_RE = re.compile(
-    r"^\s*[A-Za-z_][\w.]*(?:\s*\[\s*\])?\s+"
+    r"^\s*([A-Za-z_][\w.]*)(?:\s*\[\s*\])?\s+"
     r"([A-Za-z_]\w*)\s*(?:=.*)?;"
 )
+# Ключевые слова, начинающие ОПЕРАТОР (не объявление) и способные принять форму
+# "СЛОВО ИДЕНТИФИКАТОР;", которую DECL_RE иначе спутал бы с "TYPE name;"
+# (самый частый случай — return true;/return false; в теле геттера).
+_STATEMENT_KEYWORDS = frozenset(("return", "throw", "break", "continue", "leave", "retry"))
 SIGNATURE_RE = re.compile(
     r"^\s*(?:public|private|protected|static|server|client|abstract|final)?\s*"
     r"[\w.<>\[\]]+\s+\w+\s*\(([^)]*)\)"
@@ -220,8 +224,12 @@ def check_reserved_identifiers(path: pathlib.Path, text: str) -> List[Issue]:
     останавливается на первой строке, не похожей на объявление (`TYPE name;`) —
     по конвенции ALK объявления идут единым блоком сразу после `{`, до первого
     исполняемого оператора. Это специально ограничивает область поиска, чтобы не
-    цеплять обычные операторы вида `return foo;`/`select foo;`, где первый токен —
-    само ключевое слово, а не тип."""
+    цеплять обычные операторы вида `select foo;`, где первый токен — само ключевое
+    слово, а не тип (форма не совпадает с DECL_RE). Отдельно — операторы вида
+    `return foo;`/`throw foo;` СОВПАДАЮТ по форме с `TYPE name;` (два слова + `;`),
+    поэтому `return`/`throw`/`break`/`continue`/`leave`/`retry` в позиции типа явно
+    исключены (`_STATEMENT_KEYWORDS`): иначе любой геттер вида `{ return true; }`
+    ложно определялся бы как объявление переменной `true`."""
     issues: List[Issue] = []
     lines = text.splitlines()
     source_re = re.compile(r"^\s*SOURCE\s+#(\S+)\s*$")
@@ -276,14 +284,16 @@ def check_reserved_identifiers(path: pathlib.Path, text: str) -> List[Issue]:
                         i += 1
                         continue
                     dm = DECL_RE.match(content)
-                    if not dm:
+                    if not dm or dm.group(1).lower() in _STATEMENT_KEYWORDS:
+                        # Либо не похоже на объявление, либо это оператор вида
+                        # `return foo;`/`throw foo;` — первый токен keyword, а не тип.
                         declarations_open = False
                         i += 1
                         continue
-                    if dm.group(1).lower() in RESERVED_WORDS:
+                    if dm.group(2).lower() in RESERVED_WORDS:
                         issues.append(Issue(
                             str(path), "WARN",
-                            f"SOURCE #{method_name}: local variable '{dm.group(1)}' is "
+                            f"SOURCE #{method_name}: local variable '{dm.group(2)}' is "
                             f"a reserved X++ word — AX will reject this declaration",
                         ))
             i += 1
