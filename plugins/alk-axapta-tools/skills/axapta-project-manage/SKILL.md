@@ -208,8 +208,8 @@ cleanup-xpo --root .\xpo --keep 5 --dry-run
 cleanup-xpo --root .\xpo --keep 5 --yes
 
 # 5. Сборка финального бандла
-build-shared-project --root .\xpo --project-name ALK_DEVAX12_<TICKET> --dry-run
-build-shared-project --root .\xpo --project-name ALK_DEVAX12_<TICKET> --yes
+build-shared-project --root .\xpo --project-name ALK_DEVAX12_<TICKET>_<NICK> --dry-run
+build-shared-project --root .\xpo --project-name ALK_DEVAX12_<TICKET>_<NICK> --yes
 ```
 
 ## Подтверждение перед деструктивом
