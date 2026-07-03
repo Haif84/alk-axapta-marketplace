@@ -4,7 +4,7 @@
     "name": "ALK Development Team"
   },
   "description": "Магазин скиллов: инструменты для работы с проектами Microsoft Dynamics AX 2012 (ALK).",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "plugins": [
     {
       "name": "alk-axapta-tools",
@@ -27,8 +27,8 @@
     {
       "name": "alk-self-update",
       "source": "./plugins/alk-self-update",
-      "description": "Дневной cron-уведомитель о новых версиях маркетплейса (обновление выполняет native autoUpdate).",
-      "version": "1.0.0",
+      "description": "Дневной cron-уведомитель о новых версиях маркетплейса + CLI-команды применения обновления для VS Code extension.",
+      "version": "1.1.0",
       "author": {
         "name": "ALK Development Team"
       }

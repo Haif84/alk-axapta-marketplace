@@ -1,17 +1,22 @@
 ---
 name: check-updates
-description: Проверяет, есть ли новые коммиты в маркетплейсе alk-axapta (Haif84/alk-axapta-marketplace), и уведомляет о доступном обновлении через PushNotification. Нужен для долго открытых сессий VS Code, когда рестарта нет сутками. Ставит durable cron на ежедневную фоновую проверку. Сами файлы плагинов не трогает. Триггеры — «проверь обновления alk», «check updates», «/check-updates», а также фоновый запуск из CronCreate по маркеру ФОНОВАЯ_ПРОВЕРКА_ALK.
+description: Проверяет, есть ли новые коммиты в маркетплейсе alk-axapta (Haif84/alk-axapta-marketplace). В фоне (cron) только уведомляет через PushNotification, файлы не трогает. В интерактивном режиме показывает CLI-команды для применения обновления (claude plugin marketplace update / claude plugin update) и с согласия пользователя может их выполнить — актуально для VS Code extension, где /plugin и /reload-plugins недоступны. Ставит durable cron на ежедневную фоновую проверку. Триггеры — «проверь обновления alk», «check updates», «/check-updates», а также фоновый запуск из CronCreate по маркеру ФОНОВАЯ_ПРОВЕРКА_ALK.
 ---
 
 # check-updates
 
 Проверяет, есть ли новые коммиты в маркетплейсе `Haif84/alk-axapta-marketplace`, и **уведомляет**
-о них. Сами файлы плагинов **не трогает** — применить обновление можно через
-`/plugin marketplace update alk-axapta` + `/reload-plugins`, либо оно подтянется на старте VS Code,
-если для магазина включён auto-update тумблер.
+о них.
 
 Этот скилл нужен только для долго открытых сессий, когда VS Code не перезапускается сутками и
 нативная проверка на старте не срабатывает.
+
+**Важно про среду VS Code extension**: в native VS Code extension (в отличие от отдельного
+CLI/терминала) слэш-команды `/plugin marketplace update` и `/reload-plugins` **недоступны**
+("isn't available in this environment"), и простой рестарт VS Code (Developer: Reload Window)
+сам по себе **не гарантирует** подтягивание новой версии, даже при включённом auto-update
+тумблере — проверено 03.07.2026. Рабочий путь — CLI-команды `claude plugin marketplace update` /
+`claude plugin update <plugin>@<marketplace>` из обычного терминала (см. Шаг 4).
 
 ## Когда вызывать
 
@@ -87,16 +92,32 @@ foreach ($c in $commits) {
 ### Шаг 4. Уведомление
 
 **Фоновый режим** (вызвано из CronCreate, маркер `ФОНОВАЯ_ПРОВЕРКА_ALK`):
-- Отправить `PushNotification`: `"alk-axapta: доступно обновление ($($newCommits.Count) коммитов). Перезапустите VS Code или /plugin marketplace update alk-axapta"`
+- Отправить `PushNotification`: `"alk-axapta: доступно обновление ($($newCommits.Count) коммитов). Спросите ассистента про /check-updates, чтобы обновить."`
 - Сохранить `pending_sha = $remoteSha`, обновить `last_check`
+- **Не выполнять** `claude plugin update` в фоне — обновление плагина мид-сессии без ведома
+  пользователя может незаметно поменять поведение других скиллов; CLI-команды применяются
+  только в интерактивном режиме и только с согласия пользователя (см. ниже)
 - Выйти без интерактива
 
 **Интерактивный режим**:
-- Показать список новых коммитов
-- Пояснить: «Обновление подтянется автоматически при следующем старте VS Code (native autoUpdate).
-  Чтобы обновить **сейчас** — выполните `/plugin marketplace update alk-axapta`, затем `/reload-plugins`.»
-- Если `pending_sha` == `$remoteSha` — добавить «(вы уже видели это уведомление)»
-- **Никакого ручного копирования в кэш** — обновление делает штатный механизм Claude Code.
+- Показать список новых коммитов.
+- Показать команды, которыми обновление применяется **прямо сейчас** (работают и в VS Code
+  extension, и в CLI — в отличие от `/plugin`/`/reload-plugins`, см. примечание выше):
+  ```powershell
+  claude plugin marketplace update alk-axapta
+  $ip = Get-Content "$env:USERPROFILE\.claude\plugins\installed_plugins.json" -Raw | ConvertFrom-Json
+  $ip.plugins.PSObject.Properties.Name |
+      Where-Object { $_ -like "*@alk-axapta" } |
+      ForEach-Object { claude plugin update $_ }
+  ```
+  (обновляет разом все установленные плагины из этого маркетплейса — не только
+  `alk-axapta-tools`; короткое имя без `@alk-axapta` вернёт `Plugin "X" not found`).
+- **Спросить пользователя**, выполнить ли эти команды сейчас (через Bash/PowerShell). Если
+  согласен — выполнить, затем явно сказать: «Restart to apply changes» — команда сама об этом
+  сообщит, нужен рестарт VS Code (Developer: Reload Window), чтобы применилось.
+- После рестарта, если пользователь попросит проверить — сверить `installed_plugins.json`
+  (`version`/`gitCommitSha`) с ожидаемым значением из Шага 2.
+- Если `pending_sha` == `$remoteSha` — добавить «(вы уже видели это уведомление)».
 
 ### Шаг 5. CronCreate на следующие сутки
 
@@ -127,7 +148,10 @@ prompt   = "ФОНОВАЯ_ПРОВЕРКА_ALK: проверь обновлен
 
 ## Примечание
 
-Установленная версия обновляется штатно через `/plugin marketplace update alk-axapta` +
-`/reload-plugins`. Если пользователь включил auto-update тумблер для магазина (`/plugin` →
-Marketplaces → Enable auto-update), плагины обновятся сами при старте VS Code. Этот скилл лишь
-сообщает о доступном обновлении в долгих сессиях — он не подменяет файлы плагинов вручную.
+В отдельном CLI/терминале обновление штатно применяется через `/plugin marketplace update
+alk-axapta` + `/reload-plugins`, либо подтягивается само при старте, если для магазина включён
+auto-update тумблер. В **VS Code extension** обе слэш-команды недоступны и рестарт сам по себе
+не гарантирует обновление — используйте CLI-команды из Шага 4 (`claude plugin marketplace
+update` / `claude plugin update <plugin>@<marketplace>`) через Bash/PowerShell с согласия
+пользователя, затем попросите перезапустить VS Code. Никакого ручного копирования файлов в
+кэш — только официальные CLI-команды `claude plugin ...`.
