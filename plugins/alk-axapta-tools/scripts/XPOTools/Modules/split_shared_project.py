@@ -37,7 +37,10 @@ NAME_RES = {
     "FRM": re.compile(r"^\s*FORM\s+#(\S+)"),
     "MNU": re.compile(r"^\s*MENU\s+#(\S+)"),
     "FTM": re.compile(r"^\s*MENUITEM\s+#(\S+)"),
-    "JOB": re.compile(r"^\s*JOBNODE\s+#(\S+)"),
+    # Job не оборачивается в NODE (в отличие от CLASS/TABLE/...) — реальный
+    # экспорт AX 2012 идёт сразу JOBVERSION -> SOURCE #<Name> -> PROPERTIES,
+    # без JOBNODE. У задачи ровно один SOURCE-блок, и это сам джоб.
+    "JOB": re.compile(r"^\s*SOURCE\s+#(\S+)"),
     "QUE": re.compile(r"^\s*QUERY\s+#(\S+)"),
     "MAC": re.compile(r"^\s*MACRO\s+#(\S+)"),
     "EDT": re.compile(r"^\s*EXTENDEDTYPE\s+#(\S+)"),
