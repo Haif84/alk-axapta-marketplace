@@ -11,6 +11,10 @@
   6. Layout-consistency (только для директории): AOT-раскладка обязательна —
      плоский корень даёт WARN (валит только --strict), файл не в той AOT-подпапке
      для своего типа — ERROR (всегда).
+  7. Зарезервированные слова X++ (Modules/reserved_words.py) в роли имени поля
+     classDeclaration/tableFieldsDeclaration или параметра метода — WARN. Не
+     проверяет произвольные локальные переменные внутри тела метода (риск
+     ложных срабатываний на обычных операторах вида `return foo;`).
 
 Запуск:
     python -m Modules.validate_xpo <file_or_dir> [--strict]
@@ -28,6 +32,7 @@ from typing import Dict, List, Optional, Tuple
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from xpo_types import XPO_TYPES, NO_MARKER_REQUIRED, dir_path_for  # noqa: E402
 from config import load_config, validate_config, print_config_warnings  # noqa: E402
+from reserved_words import RESERVED_WORDS  # noqa: E402
 
 if sys.platform == "win32":
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
@@ -191,6 +196,70 @@ def check_source_block_wrapping(path: pathlib.Path, text: str, prefix: str) -> L
     return issues
 
 
+FIELD_DECL_RE = re.compile(
+    r"^\s*(?:private|public|protected)?\s*[A-Za-z_][\w.]*(?:\s*\[\s*\])?\s+"
+    r"([A-Za-z_]\w*)\s*(?:=.*)?;"
+)
+SIGNATURE_RE = re.compile(
+    r"^\s*(?:public|private|protected|static|server|client|abstract|final)?\s*"
+    r"[\w.<>\[\]]+\s+\w+\s*\(([^)]*)\)"
+)
+PARAM_RE = re.compile(r"^[A-Za-z_][\w.\[\]]*\s+([A-Za-z_]\w*)\s*(?:=.*)?$")
+
+
+def check_reserved_identifiers(path: pathlib.Path, text: str) -> List[Issue]:
+    """WARN, если имя поля classDeclaration/tableFieldsDeclaration или параметра
+    метода — зарезервированное слово X++ (см. Modules/reserved_words.py):
+    компилятор AX выдаст синтаксическую ошибку при попытке скомпилировать такое
+    объявление. Не проверяет произвольные локальные переменные внутри тела
+    метода — там высок риск ложных срабатываний на обычных операторах
+    (`return foo;`, `select foo;`), где первый токен — само ключевое слово,
+    а не тип."""
+    issues: List[Issue] = []
+    lines = text.splitlines()
+    source_re = re.compile(r"^\s*SOURCE\s+#(\S+)\s*$")
+    i = 0
+    while i < len(lines):
+        m = source_re.match(lines[i])
+        if not m:
+            i += 1
+            continue
+        method_name = m.group(1)
+        in_field_block = method_name in ("classDeclaration", "tableFieldsDeclaration")
+        signature_checked = False
+        i += 1
+        while i < len(lines):
+            stripped = lines[i].strip()
+            if stripped == "ENDSOURCE":
+                break
+            content = re.sub(r"^\s*#", "", lines[i])
+            if in_field_block:
+                fm = FIELD_DECL_RE.match(content)
+                if fm and fm.group(1).lower() in RESERVED_WORDS:
+                    issues.append(Issue(
+                        str(path), "WARN",
+                        f"SOURCE #{method_name}: field '{fm.group(1)}' is a "
+                        f"reserved X++ word — AX will reject this declaration",
+                    ))
+            elif not signature_checked and content.strip() and "(" in content:
+                signature_checked = True
+                sm = SIGNATURE_RE.match(content)
+                if sm:
+                    for part in sm.group(1).split(","):
+                        part = part.strip()
+                        if not part:
+                            continue
+                        pm = PARAM_RE.match(part)
+                        if pm and pm.group(1).lower() in RESERVED_WORDS:
+                            issues.append(Issue(
+                                str(path), "WARN",
+                                f"SOURCE #{method_name}: parameter '{pm.group(1)}' is "
+                                f"a reserved X++ word — AX will reject this declaration",
+                            ))
+            i += 1
+    return issues
+
+
 def detect_object(path: pathlib.Path, text: str) -> Tuple[str, str]:
     lines = text.splitlines()
     mnemonic = ""
@@ -320,6 +389,7 @@ def validate_one(
     issues.extend(check_mojibake(path, text))
     issues.extend(check_markers(path, text, prefix))
     issues.extend(check_source_block_wrapping(path, text, prefix))
+    issues.extend(check_reserved_identifiers(path, text))
     obj = detect_object(path, text)
     if root is not None and obj[0]:
         issues.extend(check_layout_consistency(path, root, obj[0], text))
