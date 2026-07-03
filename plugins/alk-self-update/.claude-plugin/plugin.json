@@ -1,7 +1,7 @@
 {
   "name": "alk-self-update",
-  "description": "Проверка обновлений маркетплейса alk-axapta. Дневной cron-уведомитель о новых версиях для долго открытых сессий (обновление выполняет native autoUpdate при старте VS Code).",
-  "version": "1.0.0",
+  "description": "Проверка обновлений маркетплейса alk-axapta. Дневной cron-уведомитель о новых версиях для долго открытых сессий; в интерактивном режиме показывает CLI-команды применения (claude plugin marketplace update / claude plugin update) — актуально для VS Code extension, где /plugin и /reload-plugins недоступны.",
+  "version": "1.1.0",
   "author": {
     "name": "ALK Development Team"
   },
