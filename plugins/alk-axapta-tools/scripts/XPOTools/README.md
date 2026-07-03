@@ -68,9 +68,9 @@ cd "$env:USERPROFILE\.claude\scripts\XPOTools"
 ## Примеры
 
 ```powershell
-# Сборка финального бандла
-build-shared-project --root .\XPO --project-name ALK_DEVAX12_DAX_012345 --dry-run
-build-shared-project --root .\XPO --project-name ALK_DEVAX12_DAX_012345 --yes
+# Сборка финального бандла (шаблон имени: <ProjectId>_<ModCode>_<UserNick>)
+build-shared-project --root .\XPO --project-name ALK_DEVAX12_DAX_012345_akaz --dry-run
+build-shared-project --root .\XPO --project-name ALK_DEVAX12_DAX_012345_akaz --yes
 
 # Валидация
 validate-xpo .\XPO --strict
