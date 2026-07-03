@@ -11,6 +11,12 @@
   6. Layout-consistency (только для директории): AOT-раскладка обязательна —
      плоский корень даёт WARN (валит только --strict), файл не в той AOT-подпапке
      для своего типа — ERROR (всегда).
+  7. Зарезервированные слова X++ (Modules/reserved_words.py) в роли имени
+     параметра метода или локальной переменной — WARN. Поля classDeclaration/
+     tableFieldsDeclaration намеренно НЕ проверяются. Локальные переменные
+     детектируются только в начале тела метода (блок объявлений сразу после
+     `{`, до первого исполняемого оператора) — не цепляет обычные операторы
+     вида `return foo;`.
 
 Запуск:
     python -m Modules.validate_xpo <file_or_dir> [--strict]
@@ -28,6 +34,7 @@ from typing import Dict, List, Optional, Tuple
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from xpo_types import XPO_TYPES, NO_MARKER_REQUIRED, dir_path_for  # noqa: E402
 from config import load_config, validate_config, print_config_warnings  # noqa: E402
+from reserved_words import RESERVED_WORDS  # noqa: E402
 
 if sys.platform == "win32":
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
@@ -191,6 +198,108 @@ def check_source_block_wrapping(path: pathlib.Path, text: str, prefix: str) -> L
     return issues
 
 
+DECL_RE = re.compile(
+    r"^\s*([A-Za-z_][\w.]*)(?:\s*\[\s*\])?\s+"
+    r"([A-Za-z_]\w*)\s*(?:=.*)?;"
+)
+# Ключевые слова, начинающие ОПЕРАТОР (не объявление) и способные принять форму
+# "СЛОВО ИДЕНТИФИКАТОР;", которую DECL_RE иначе спутал бы с "TYPE name;"
+# (самый частый случай — return true;/return false; в теле геттера).
+_STATEMENT_KEYWORDS = frozenset(("return", "throw", "break", "continue", "leave", "retry"))
+SIGNATURE_RE = re.compile(
+    r"^\s*(?:public|private|protected|static|server|client|abstract|final)?\s*"
+    r"[\w.<>\[\]]+\s+\w+\s*\(([^)]*)\)"
+)
+PARAM_RE = re.compile(r"^[A-Za-z_][\w.\[\]]*\s+([A-Za-z_]\w*)\s*(?:=.*)?$")
+
+
+def check_reserved_identifiers(path: pathlib.Path, text: str) -> List[Issue]:
+    """WARN, если имя параметра метода или локальной переменной — зарезервированное
+    слово X++ (см. Modules/reserved_words.py): компилятор AX выдаст синтаксическую
+    ошибку при попытке скомпилировать такое объявление. Поля classDeclaration /
+    tableFieldsDeclaration намеренно НЕ проверяются — это осознанное решение
+    (в отличие от локальных переменных/параметров).
+
+    Локальные переменные детектируются только в начале тела метода: сканирование
+    останавливается на первой строке, не похожей на объявление (`TYPE name;`) —
+    по конвенции ALK объявления идут единым блоком сразу после `{`, до первого
+    исполняемого оператора. Это специально ограничивает область поиска, чтобы не
+    цеплять обычные операторы вида `select foo;`, где первый токен — само ключевое
+    слово, а не тип (форма не совпадает с DECL_RE). Отдельно — операторы вида
+    `return foo;`/`throw foo;` СОВПАДАЮТ по форме с `TYPE name;` (два слова + `;`),
+    поэтому `return`/`throw`/`break`/`continue`/`leave`/`retry` в позиции типа явно
+    исключены (`_STATEMENT_KEYWORDS`): иначе любой геттер вида `{ return true; }`
+    ложно определялся бы как объявление переменной `true`."""
+    issues: List[Issue] = []
+    lines = text.splitlines()
+    source_re = re.compile(r"^\s*SOURCE\s+#(\S+)\s*$")
+    i = 0
+    while i < len(lines):
+        m = source_re.match(lines[i])
+        if not m:
+            i += 1
+            continue
+        method_name = m.group(1)
+        if method_name in ("classDeclaration", "tableFieldsDeclaration"):
+            # Поля не проверяем — только переменные/параметры методов.
+            i += 1
+            while i < len(lines) and lines[i].strip() != "ENDSOURCE":
+                i += 1
+            continue
+        signature_checked = False
+        declarations_open = False
+        i += 1
+        while i < len(lines):
+            if lines[i].strip() == "ENDSOURCE":
+                break
+            # Строки внутри SOURCE-блока в .xpo предварены символом `#` (иногда с
+            # отступом перед ним) — сравнивать нужно очищенный контент, не сырую
+            # строку, иначе `#{`/`#` (пустая строка)/`#    ;` не совпадут с "{"/""/";" .
+            content = re.sub(r"^\s*#", "", lines[i])
+            content_stripped = content.strip()
+            if not signature_checked and content_stripped and "(" in content:
+                signature_checked = True
+                sm = SIGNATURE_RE.match(content)
+                if sm:
+                    for part in sm.group(1).split(","):
+                        part = part.strip()
+                        if not part:
+                            continue
+                        pm = PARAM_RE.match(part)
+                        if pm and pm.group(1).lower() in RESERVED_WORDS:
+                            issues.append(Issue(
+                                str(path), "WARN",
+                                f"SOURCE #{method_name}: parameter '{pm.group(1)}' is "
+                                f"a reserved X++ word — AX will reject this declaration",
+                            ))
+                i += 1
+                continue
+            if signature_checked:
+                if content_stripped == "{":
+                    declarations_open = True
+                    i += 1
+                    continue
+                if declarations_open:
+                    if content_stripped == "" or content_stripped == ";":
+                        i += 1
+                        continue
+                    dm = DECL_RE.match(content)
+                    if not dm or dm.group(1).lower() in _STATEMENT_KEYWORDS:
+                        # Либо не похоже на объявление, либо это оператор вида
+                        # `return foo;`/`throw foo;` — первый токен keyword, а не тип.
+                        declarations_open = False
+                        i += 1
+                        continue
+                    if dm.group(2).lower() in RESERVED_WORDS:
+                        issues.append(Issue(
+                            str(path), "WARN",
+                            f"SOURCE #{method_name}: local variable '{dm.group(2)}' is "
+                            f"a reserved X++ word — AX will reject this declaration",
+                        ))
+            i += 1
+    return issues
+
+
 def detect_object(path: pathlib.Path, text: str) -> Tuple[str, str]:
     lines = text.splitlines()
     mnemonic = ""
@@ -320,6 +429,7 @@ def validate_one(
     issues.extend(check_mojibake(path, text))
     issues.extend(check_markers(path, text, prefix))
     issues.extend(check_source_block_wrapping(path, text, prefix))
+    issues.extend(check_reserved_identifiers(path, text))
     obj = detect_object(path, text)
     if root is not None and obj[0]:
         issues.extend(check_layout_consistency(path, root, obj[0], text))
