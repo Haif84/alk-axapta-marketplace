@@ -12,11 +12,11 @@
      плоский корень даёт WARN (валит только --strict), файл не в той AOT-подпапке
      для своего типа — ERROR (всегда).
   7. Зарезервированные слова X++ (Modules/reserved_words.py) в роли имени
-     параметра метода или локальной переменной — WARN. Поля classDeclaration/
-     tableFieldsDeclaration намеренно НЕ проверяются. Локальные переменные
-     детектируются только в начале тела метода (блок объявлений сразу после
-     `{`, до первого исполняемого оператора) — не цепляет обычные операторы
-     вида `return foo;`.
+     параметра метода, локальной переменной или поля classDeclaration — WARN.
+     Поля tableFieldsDeclaration (столбцы таблиц, метаданные) намеренно НЕ
+     проверяются. Локальные переменные детектируются только в начале тела
+     метода (блок объявлений сразу после `{`, до первого исполняемого
+     оператора) — не цепляет обычные операторы вида `return foo;`.
 
 Запуск:
     python -m Modules.validate_xpo <file_or_dir> [--strict]
@@ -214,11 +214,17 @@ PARAM_RE = re.compile(r"^[A-Za-z_][\w.\[\]]*\s+([A-Za-z_]\w*)\s*(?:=.*)?$")
 
 
 def check_reserved_identifiers(path: pathlib.Path, text: str) -> List[Issue]:
-    """WARN, если имя параметра метода или локальной переменной — зарезервированное
-    слово X++ (см. Modules/reserved_words.py): компилятор AX выдаст синтаксическую
-    ошибку при попытке скомпилировать такое объявление. Поля classDeclaration /
-    tableFieldsDeclaration намеренно НЕ проверяются — это осознанное решение
-    (в отличие от локальных переменных/параметров).
+    """WARN, если имя параметра метода, локальной переменной или поля класса —
+    зарезервированное слово X++ (см. Modules/reserved_words.py): компилятор AX
+    выдаст синтаксическую ошибку при попытке скомпилировать такое объявление.
+
+    Поля `tableFieldsDeclaration` (столбцы Data Dictionary) намеренно НЕ
+    проверяются: это метаданные AOT, а не буквальные X++-объявления,
+    парсящиеся тем же лексером — по конвенции ALK имена столбцов таблиц (и
+    имена самих таблиц) МОГУТ совпадать с зарезервированными словами. Поля
+    `classDeclaration` (члены класса), напротив, — обычные X++-объявления,
+    проходящие тот же лексер, что параметры/локальные переменные, поэтому
+    проверяются наравне с ними.
 
     Локальные переменные детектируются только в начале тела метода: сканирование
     останавливается на первой строке, не похожей на объявление (`TYPE name;`) —
@@ -240,10 +246,30 @@ def check_reserved_identifiers(path: pathlib.Path, text: str) -> List[Issue]:
             i += 1
             continue
         method_name = m.group(1)
-        if method_name in ("classDeclaration", "tableFieldsDeclaration"):
-            # Поля не проверяем — только переменные/параметры методов.
+        if method_name == "tableFieldsDeclaration":
+            # Столбцы таблиц — метаданные, не проверяем (см. docstring).
             i += 1
             while i < len(lines) and lines[i].strip() != "ENDSOURCE":
+                i += 1
+            continue
+        if method_name == "classDeclaration":
+            # Поля класса — обычные X++-объявления, проверяем как локальные
+            # переменные/параметры. Здесь нет исполняемых операторов вообще
+            # (только объявления и #define-макросы), поэтому не нужна логика
+            # "остановиться на первом non-decl" — просто сканируем всё тело.
+            i += 1
+            while i < len(lines):
+                if lines[i].strip() == "ENDSOURCE":
+                    break
+                content = re.sub(r"^\s*#", "", lines[i])
+                dm = DECL_RE.match(content)
+                if (dm and dm.group(1).lower() not in _STATEMENT_KEYWORDS
+                        and dm.group(2).lower() in RESERVED_WORDS):
+                    issues.append(Issue(
+                        str(path), "WARN",
+                        f"SOURCE #classDeclaration: field '{dm.group(2)}' is a "
+                        f"reserved X++ word — AX will reject this declaration",
+                    ))
                 i += 1
             continue
         signature_checked = False
