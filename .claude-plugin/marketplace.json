@@ -4,7 +4,7 @@
     "name": "ALK Development Team"
   },
   "description": "Магазин скиллов: инструменты для работы с проектами Microsoft Dynamics AX 2012 (ALK).",
-  "version": "1.6.3",
+  "version": "1.7.0",
   "plugins": [
     {
       "name": "alk-axapta-tools",
@@ -29,6 +29,15 @@
       "source": "./plugins/alk-self-update",
       "description": "Cron-уведомитель о новых версиях каждые 2 часа (8:30-22:30) + CLI-команды применения обновления для VS Code extension.",
       "version": "1.2.1",
+      "author": {
+        "name": "ALK Development Team"
+      }
+    },
+    {
+      "name": "alk-hooks-claude2telegram",
+      "source": "./plugins/alk-hooks-claude2telegram",
+      "description": "Hooks: разрешения и уведомления Claude Code через Telegram-бота (Allow/Deny с телефона, /wait для увеличения таймаута). Активируется сам при установке (hooks/hooks.json).",
+      "version": "1.0.0",
       "author": {
         "name": "ALK Development Team"
       }
