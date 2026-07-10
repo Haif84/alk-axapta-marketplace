@@ -1,5 +1,6 @@
 ﻿# Shared helpers for Claude Code -> Telegram hook scripts.
-# Dot-sourced by notify-telegram.ps1 and ask-telegram.ps1; must live alongside them.
+# Dot-sourced by the hook scripts in this folder (notify-telegram /
+# pretooluse-approve / posttooluse-mark-answered / watch-and-inject); must live alongside them.
 #
 # Messages are sent with Telegram parse_mode=HTML (see relay's ask.py/notify.py),
 # so every piece of dynamic text (commands, descriptions, project names) MUST be

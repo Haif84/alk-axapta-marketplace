@@ -1,6 +1,7 @@
 ﻿# Relays Claude Code hook events (PermissionRequest/Notification, Stop, PreToolUse)
 # to a Telegram group via the existing tg-relay HTTP relay (LT_TGProxy/tg-relay on proxy-01).
-# Installed as ~/.claude/hooks/notify-telegram.ps1, registered in ~/.claude/settings.json.
+# Shipped as part of the alk-hooks-claude2telegram plugin; activated via the
+# plugin's hooks/hooks.json (no manual ~/.claude/settings.json edit needed).
 # Must never block or fail the session — always exits 0, swallows all errors.
 
 $ErrorActionPreference = 'Stop'
@@ -21,7 +22,7 @@ try {
     # that never prompt), and skip the redundant plain FYI. PermissionRequest's
     # hook JSON has no tool_use_id (confirmed empirically), so match on
     # tool_name+correlation key instead. Keep the list in sync with the
-    # PreToolUse/PostToolUse matcher in settings.json.
+    # PreToolUse/PostToolUse matcher in hooks/hooks.json.
     $interactiveToolNames = @('Bash', 'PowerShell', 'Write', 'Edit', 'MultiEdit', 'NotebookEdit', 'WebFetch')
     if ($eventName -eq 'PermissionRequest' -and $interactiveToolNames -contains $hook.tool_name) {
         $corrKey = Get-ToolCorrelationKey -ToolInput $hook.tool_input

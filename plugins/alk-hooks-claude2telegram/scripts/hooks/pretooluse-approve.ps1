@@ -48,6 +48,14 @@ try {
         created    = [int][double]::Parse((Get-Date -UFormat %s))
     }
 
+    # Cost / trade-off worth knowing: this spawns a hidden watcher process on
+    # EVERY matched tool call (Bash|PowerShell|Write|Edit|MultiEdit|NotebookEdit|
+    # WebFetch). For allowlisted / auto-approved calls no PermissionRequest ever
+    # fires, so the watcher sends nothing to Telegram - it just waits up to
+    # promptWaitBudgetSec (15s, defined in watch-and-inject.ps1) and exits. On a
+    # busy session that's a steady stream of short-lived background processes.
+    # It's the accepted price of racing the native dialog: PreToolUse can't know
+    # up front whether a call is allowlisted, so it must arm a watcher for all.
     $watcher = Join-Path $PSScriptRoot 'watch-and-inject.ps1'
     Start-Process -FilePath 'powershell' -WindowStyle Hidden -ArgumentList @(
         '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$watcher`"", "`"$toolUseId`""
