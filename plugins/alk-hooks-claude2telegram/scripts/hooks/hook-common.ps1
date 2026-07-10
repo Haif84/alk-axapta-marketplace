@@ -28,6 +28,28 @@ function Format-MarkdownToTelegramHtml {
     return $escaped
 }
 
+function Format-TextPreview {
+    # HTML-escaped, truncated, single-line-collapsed preview of arbitrary text
+    # for embedding inside a <code> block. Collapsing newlines to a visible
+    # marker keeps multi-line content from blowing up message length while
+    # still showing it happened.
+    param([string]$Text, [int]$MaxLength = 200)
+    if (-not $Text) { return '' }
+    $t = $Text -replace '\r?\n', ' ⏎ '
+    if ($t.Length -gt $MaxLength) { $t = $t.Substring(0, $MaxLength) + '...' }
+    return Format-HtmlEscape $t
+}
+
+function Format-EditPreview {
+    # Two-line before/after preview for an Edit-style old_string/new_string
+    # pair, each independently truncated - a quick diff glance, not a full one.
+    param([string]$OldString, [string]$NewString)
+    $lines = @()
+    if ($OldString) { $lines += "<code>- $(Format-TextPreview -Text $OldString -MaxLength 150)</code>" }
+    if ($NewString) { $lines += "<code>+ $(Format-TextPreview -Text $NewString -MaxLength 150)</code>" }
+    return $lines
+}
+
 function Get-ToolSummary {
     param($Hook)
 
@@ -61,29 +83,42 @@ function Get-ToolSummary {
     }
 
     # File-editing tools: mirror the local dialog's own phrasing ("Make this
-    # edit to <file>?") instead of dumping raw old_string/new_string, which is
-    # noisy and unreadable in a chat message.
+    # edit to <file>?"), plus a short truncated content preview so the phone
+    # side isn't deciding blind - full diffs are still too noisy for a chat
+    # message, but a first look at what's changing is worth the extra lines.
     if ($Hook.tool_name -eq 'Write' -and $toolInput.file_path) {
         $fp = Format-HtmlEscape ([string]$toolInput.file_path)
-        return "$summary`: <b>Create/overwrite $fp?</b>"
+        $lines = @("<b>Create/overwrite ${fp}?</b>")
+        if ($toolInput.content) {
+            $lines += "<code>$(Format-TextPreview -Text ([string]$toolInput.content) -MaxLength 300)</code>"
+        }
+        return "$summary`: " + ($lines -join "`n")
     }
     if ($Hook.tool_name -eq 'Edit' -and $toolInput.file_path) {
         $fp = Format-HtmlEscape ([string]$toolInput.file_path)
-        return "$summary`: <b>Make this edit to $fp?</b>"
+        $lines = @("<b>Make this edit to ${fp}?</b>")
+        $lines += Format-EditPreview -OldString $toolInput.old_string -NewString $toolInput.new_string
+        return "$summary`: " + ($lines -join "`n")
     }
     if ($Hook.tool_name -eq 'MultiEdit' -and $toolInput.file_path) {
         $fp = Format-HtmlEscape ([string]$toolInput.file_path)
-        $count = 0
-        if ($toolInput.edits) { $count = @($toolInput.edits).Count }
-        return "$summary`: <b>Make $count edit(s) to $fp?</b>"
+        $edits = @()
+        if ($toolInput.edits) { $edits = @($toolInput.edits) }
+        $lines = @("<b>Make $($edits.Count) edit(s) to ${fp}?</b>")
+        $shown = [Math]::Min(2, $edits.Count)
+        for ($i = 0; $i -lt $shown; $i++) {
+            $lines += Format-EditPreview -OldString $edits[$i].old_string -NewString $edits[$i].new_string
+        }
+        if ($edits.Count -gt $shown) { $lines += "... +$($edits.Count - $shown) more" }
+        return "$summary`: " + ($lines -join "`n")
     }
     if ($Hook.tool_name -eq 'NotebookEdit' -and $toolInput.notebook_path) {
         $np = Format-HtmlEscape ([string]$toolInput.notebook_path)
-        return "$summary`: <b>Edit notebook $np?</b>"
+        return "$summary`: <b>Edit notebook ${np}?</b>"
     }
     if ($Hook.tool_name -eq 'WebFetch' -and $toolInput.url) {
         $url = Format-HtmlEscape ([string]$toolInput.url)
-        return "$summary`: <b>Fetch $url?</b>"
+        return "$summary`: <b>Fetch ${url}?</b>"
     }
 
     $parts = @()
