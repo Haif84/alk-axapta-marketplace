@@ -1,0 +1,30 @@
+# alk-hooks-claude2telegram
+
+Гейт подтверждения разрешений Claude Code через Telegram: когда VS Code показывает диалог "Allow/Deny", копия запроса с кнопками уходит в Telegram — можно ответить с телефона, гонка с локальным диалогом решается тем, кто ответит первым. Дополнительно доступна команда `/wait` у бота — временно увеличивает таймаут ожидания ответа (10 мин / 1ч / 4ч / 8ч / 12ч, на фиксированные 24 часа).
+
+## Установка
+
+1. `/plugin marketplace add Haif84/alk-axapta-marketplace` (если ещё не добавлен)
+2. `/plugin install alk-hooks-claude2telegram@alk-axapta`
+3. Создать файл `~/.claude/tg-approve.secrets.json`:
+   ```json
+   {
+     "relay_url": "https://proxy-01.westeurope.cloudapp.azure.com:8443/notify",
+     "ask_url": "https://proxy-01.westeurope.cloudapp.azure.com:8443/ask",
+     "answer_url_base": "https://proxy-01.westeurope.cloudapp.azure.com:8443/answer",
+     "edit_url": "https://proxy-01.westeurope.cloudapp.azure.com:8443/edit",
+     "wait_budget_url": "https://proxy-01.westeurope.cloudapp.azure.com:8443/wait-budget",
+     "relay_secret": "<получить лично>",
+     "claude_chat_id": <ваш chat_id>
+   }
+   ```
+   - `relay_secret` — общий на всю команду, получить у владельца relay напрямую (не через открытый канал).
+   - `claude_chat_id` — свой: создайте отдельный чат/группу, добавьте туда бота `@AINotify685_bot`, узнайте `chat_id` (например, отправив что-то боту и попросив владельца relay посмотреть логи, либо через `getUpdates`/`getChat` Bot API).
+
+Хуки активируются сразу после установки — редактировать `settings.json` вручную не нужно.
+
+## Важно
+
+- Если файл секретов не найден — хуки тихо ничего не делают (fail-open), обычный локальный диалог разрешений работает как всегда.
+- Общий `relay_secret` технически даёт доступ к любому `chat_id` на этом relay, не только своему — модель доверия рассчитана на небольшую доверенную команду.
+- Отключить полностью на время: `$env:TG_APPROVE_OFF = '1'` перед запуском Claude Code / VS Code.
