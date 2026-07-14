@@ -28,6 +28,32 @@ function Format-MarkdownToTelegramHtml {
     return $escaped
 }
 
+function Format-TruncatedTelegramHtml {
+    # Telegram rejects any message over 4096 chars outright, and that cap is
+    # measured on the FINAL text - after Format-MarkdownToTelegramHtml's entity
+    # expansion (& -> &amp;, < -> &lt;, > -> &gt;), so a raw-length cap alone
+    # can't guarantee fit: a code-heavy reply full of angle brackets can grow
+    # well past the raw cut. Truncating the converted HTML isn't safe either -
+    # it can cut a tag or entity in half and Telegram then rejects the whole
+    # message. So: cut the RAW text, convert, and if the result still
+    # overshoots, shrink the raw cut PROPORTIONALLY to the overshoot and
+    # reconvert (subtracting the overflow outright would over-shrink up to 4x
+    # for heavily-escaped text, discarding content that would have fit).
+    # Escaping grows monotonically with input length and $keep strictly
+    # decreases each pass, so this converges - typically in 1-2 iterations.
+    param([string]$Text, [int]$MaxRawChars, [int]$MaxHtmlChars = 3900)
+    $keep = [Math]::Min($Text.Length, $MaxRawChars)
+    while ($true) {
+        $body = $Text.Substring(0, $keep)
+        if ($keep -lt $Text.Length) {
+            $body += "...`n`n(обрезано, ещё $($Text.Length - $keep) символов)"
+        }
+        $html = Format-MarkdownToTelegramHtml $body
+        if ($html.Length -le $MaxHtmlChars -or $keep -le 0) { return $html }
+        $keep = [Math]::Min($keep - 1, [Math]::Floor($keep * $MaxHtmlChars / $html.Length))
+    }
+}
+
 function Format-TextPreview {
     # HTML-escaped, truncated, single-line-collapsed preview of arbitrary text
     # for embedding inside a <code> block. Collapsing newlines to a visible
@@ -247,6 +273,24 @@ function Get-EffectiveWaitBudget {
     try {
         $response = Get-RelayJson -Uri $Secrets.wait_budget_url -Secret $Secrets.relay_secret -TimeoutSec 5
         if ($response.ok -and $response.budget_seconds) { return [int]$response.budget_seconds }
+    } catch {
+    }
+    return $fallback
+}
+
+function Get-EffectiveMaxLength {
+    # How many raw characters of Claude's reply the Stop notification keeps -
+    # settable from the phone via the bot's /length command (Минимум 500 /
+    # Средне 1000 / Максимум 3800), served by the relay's GET /length-budget.
+    # Same single-source-of-truth reasoning as Get-EffectiveWaitBudget above.
+    # Any failure (field missing from older secrets files, network, relay down)
+    # falls back to 3800 - must never block or fail the notify flow.
+    param([object]$Secrets)
+    $fallback = 3800
+    if (-not $Secrets.length_budget_url) { return $fallback }
+    try {
+        $response = Get-RelayJson -Uri $Secrets.length_budget_url -Secret $Secrets.relay_secret -TimeoutSec 5
+        if ($response.ok -and $response.max_chars) { return [int]$response.max_chars }
     } catch {
     }
     return $fallback

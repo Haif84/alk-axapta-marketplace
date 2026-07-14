@@ -63,14 +63,13 @@ try {
         'Notification'      { "🔔 $project — $(Format-HtmlEscape $hook.message)" }
         'Stop' {
             $lastMsg = if ($hook.last_assistant_message) { [string]$hook.last_assistant_message } else { '' }
-            # Telegram's hard cap is 4096 chars/message; leave headroom for the
-            # "✅ $project — Claude:\n" prefix plus Format-MarkdownToTelegramHtml's
-            # HTML-entity expansion (&/</> each grow when escaped).
-            if ($lastMsg.Length -gt 3800) {
-                $cut = $lastMsg.Length - 3800
-                $lastMsg = $lastMsg.Substring(0, 3800) + "...`n`n(обрезано, ещё $cut символов)"
-            }
-            if ($lastMsg) { "✅ $project — Claude:`n$(Format-MarkdownToTelegramHtml $lastMsg)" } else { "✅ $project — Claude завершил ответ" }
+            if ($lastMsg) {
+                # Raw cap is the /length preset from the relay (500/1000/3800);
+                # Format-TruncatedTelegramHtml then guarantees the converted
+                # HTML fits Telegram's 4096 hard cap with prefix headroom.
+                $limit = Get-EffectiveMaxLength -Secrets $secrets
+                "✅ $project — Claude:`n$(Format-TruncatedTelegramHtml -Text $lastMsg -MaxRawChars $limit)"
+            } else { "✅ $project — Claude завершил ответ" }
         }
         'PreToolUse'        { "⚙️ $project — выполняется: $toolSummary" }
         default             { "ℹ️ $project — $(Format-HtmlEscape $eventName)" }
