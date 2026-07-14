@@ -50,6 +50,55 @@ function Format-EditPreview {
     return $lines
 }
 
+function Get-MachineLabel {
+    # Human-readable machine name for Telegram messages, e.g. "Home" instead of
+    # "DESKTOP-KH7I0G3" - opt-in via an optional machine_alias field in the
+    # secrets file. Falls back to $env:COMPUTERNAME so machines without an
+    # alias configured keep working exactly as before.
+    param($Secrets)
+    if ($Secrets -and $Secrets.machine_alias) { return [string]$Secrets.machine_alias }
+    return $env:COMPUTERNAME
+}
+
+function Get-ProjectContext {
+    # Single place that derives both the raw project folder name (used as the
+    # Telegram-topic routing key - must stay un-escaped and without the machine
+    # suffix) and the HTML-escaped display label shown in message text. Having
+    # one function instead of duplicating this in every script is what lets the
+    # raw name and the display label never drift apart.
+    param($Hook, $Secrets)
+    $raw = 'unknown'
+    if ($Hook.cwd) { $raw = Split-Path -Leaf $Hook.cwd }
+    $machineLabel = Get-MachineLabel -Secrets $Secrets
+    $display = Format-HtmlEscape "$raw [$machineLabel]"
+    return [PSCustomObject]@{ Raw = $raw; Display = $display }
+}
+
+function Get-PendingTelegramFeedback {
+    # Pulls and consumes any free-text messages a teammate typed into this
+    # project's Telegram topic (see relay's GET /inbox/{project}), joined into
+    # one string for a hook's additionalContext. There is no periodic/background
+    # hook in Claude Code, so this is only ever checked opportunistically at
+    # whatever hook actually fires next (UserPromptSubmit) - delivery is "next
+    # time you interact with the session", not real-time. Never throws: a relay
+    # hiccup should just mean no feedback surfaces this time, not a broken hook.
+    param([object]$Secrets, [string]$Project)
+    if (-not $Secrets.inbox_url_base -or -not $Project) { return $null }
+    try {
+        $uri = "$($Secrets.inbox_url_base)/$([Uri]::EscapeDataString($Project))"
+        $response = Get-RelayJson -Uri $uri -Secret $Secrets.relay_secret -TimeoutSec 5
+        if (-not $response.ok -or -not $response.messages -or @($response.messages).Count -eq 0) { return $null }
+        $lines = @()
+        foreach ($m in @($response.messages)) {
+            $who = if ($m.from) { [string]$m.from } else { 'Telegram' }
+            $lines += "[$who]: $($m.text)"
+        }
+        return ($lines -join "`n")
+    } catch {
+        return $null
+    }
+}
+
 function Get-ToolSummary {
     param($Hook)
 

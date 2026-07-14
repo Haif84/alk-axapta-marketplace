@@ -49,9 +49,12 @@ try {
         Complete-ApproveStatesForSession -SessionId $hook.session_id
     }
 
-    $project = 'unknown'
-    if ($hook.cwd) { $project = Split-Path -Leaf $hook.cwd }
-    $project = Format-HtmlEscape "$project [$env:COMPUTERNAME]"
+    $secretsPath = Get-TgApproveSecretsPath
+    if (-not $secretsPath) { exit 0 }
+    $secrets = Get-Content -LiteralPath $secretsPath -Raw | ConvertFrom-Json
+
+    $projectCtx = Get-ProjectContext -Hook $hook -Secrets $secrets
+    $project = $projectCtx.Display
 
     $toolSummary = Get-ToolSummary -Hook $hook
 
@@ -60,20 +63,23 @@ try {
         'Notification'      { "🔔 $project — $(Format-HtmlEscape $hook.message)" }
         'Stop' {
             $lastMsg = if ($hook.last_assistant_message) { [string]$hook.last_assistant_message } else { '' }
-            if ($lastMsg.Length -gt 500) { $lastMsg = $lastMsg.Substring(0, 500) + '...' }
+            # Telegram's hard cap is 4096 chars/message; leave headroom for the
+            # "✅ $project — Claude:\n" prefix plus Format-MarkdownToTelegramHtml's
+            # HTML-entity expansion (&/</> each grow when escaped).
+            if ($lastMsg.Length -gt 3800) {
+                $cut = $lastMsg.Length - 3800
+                $lastMsg = $lastMsg.Substring(0, 3800) + "...`n`n(обрезано, ещё $cut символов)"
+            }
             if ($lastMsg) { "✅ $project — Claude:`n$(Format-MarkdownToTelegramHtml $lastMsg)" } else { "✅ $project — Claude завершил ответ" }
         }
         'PreToolUse'        { "⚙️ $project — выполняется: $toolSummary" }
         default             { "ℹ️ $project — $(Format-HtmlEscape $eventName)" }
     }
 
-    $secretsPath = Get-TgApproveSecretsPath
-    if (-not $secretsPath) { exit 0 }
-    $secrets = Get-Content -LiteralPath $secretsPath -Raw | ConvertFrom-Json
-
     Send-RelayJson -Uri $secrets.relay_url -Secret $secrets.relay_secret -TimeoutSec 5 -Body @{
         text    = $message
         chat_id = $secrets.claude_chat_id
+        project = $projectCtx.Raw
     } | Out-Null
 } catch {
     # Never let a Telegram/relay failure affect the Claude Code session.

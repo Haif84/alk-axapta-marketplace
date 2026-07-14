@@ -41,6 +41,16 @@
           }
         ]
       }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/userpromptsubmit-inject-feedback.ps1\""
+          }
+        ]
+      }
     ]
   }
 }

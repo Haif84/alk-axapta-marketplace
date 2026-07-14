@@ -51,6 +51,7 @@ try {
     $askResponse = Send-RelayJson -Uri $secrets.ask_url -Secret $secrets.relay_secret -TimeoutSec 10 -Body @{
         text    = $message
         chat_id = $secrets.claude_chat_id
+        project = $state.raw_project
     }
     if (-not $askResponse.ok -or -not $askResponse.request_id) {
         Remove-ApproveState -ToolUseId $ToolUseId
