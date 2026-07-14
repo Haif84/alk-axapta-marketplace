@@ -52,9 +52,9 @@ XPOTools (Python-скрипты `build-shared-project`, `validate-xpo`, `organiz
 - Hook `move-plan` (перекладка планов после `ExitPlanMode`) **уже активен** — он зашит в плагин
   `alk-hooks-plans2project` (`hooks/hooks.json`), править `settings.json` вручную не нужно.
 - Хуки `alk-hooks-claude2telegram` тоже активируются сами, но **без файла секретов молча ничего
-  не делают** (fail-open) — нужен разовый ручной шаг, см. `plugins/alk-hooks-claude2telegram/
-  README.md` (создать `~/.claude/tg-approve.secrets.json`, получить `relay_secret` у владельца
-  relay).
+  не делают** (fail-open) — нужен разовый ручной шаг, см.
+  `plugins/alk-hooks-claude2telegram/README.md` (создать `~/.claude/tg-approve.secrets.json`,
+  получить `relay_secret` у владельца relay).
 - Скиллы доступны сразу:
 
 ```
@@ -137,10 +137,11 @@ $claudeExe = Get-ChildItem "$env:USERPROFILE\.vscode\extensions" -Filter "claude
 & $claudeExe plugin update alk-hooks-claude2telegram@alk-axapta   # и т.д. по каждому плагину
 ```
 
-Путь выглядит как `%USERPROFILE%\.vscode\extensions\anthropic.claude-code-<version>-win32-x64\
-resources\native-binary\claude.exe` — версия расширения в пути меняется при каждом апдейте VS
-Code Marketplace, поэтому искать по шаблону (`Get-ChildItem -Recurse`), а не хардкодить конкретную
-версию. Найдено и проверено вживую 2026-07-14.
+Путь выглядит как
+`%USERPROFILE%\.vscode\extensions\anthropic.claude-code-<version>-win32-x64\resources\native-binary\claude.exe`
+— версия расширения в пути меняется при каждом апдейте VS Code Marketplace, поэтому искать по
+шаблону (`Get-ChildItem -Recurse`), а не хардкодить конкретную версию. Найдено и проверено
+вживую 2026-07-14.
 
 **Опционально — автообновление на рестарте.** Если хотите, чтобы обновления не только
 уведомлялись, но и ставились сами при старте VS Code, включите auto-update для магазина один раз:
