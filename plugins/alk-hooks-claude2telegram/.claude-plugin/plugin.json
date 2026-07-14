@@ -1,7 +1,7 @@
 {
   "name": "alk-hooks-claude2telegram",
-  "description": "Hooks: разрешения и уведомления Claude Code через Telegram-бота — Allow/Deny с телефона гонкой с локальным диалогом, /wait для временного увеличения таймаута ожидания ответа. Активируется сам при установке (hooks/hooks.json).",
-  "version": "1.0.2",
+  "description": "Hooks: разрешения и уведомления Claude Code через Telegram-бота — Allow/Deny с телефона гонкой с локальным диалогом, /wait для временного увеличения таймаута ожидания ответа, алиасы машин, темы по проектам, обратная связь Telegram → сессия. Активируется сам при установке (hooks/hooks.json).",
+  "version": "1.1.0",
   "author": {
     "name": "ALK Development Team"
   },

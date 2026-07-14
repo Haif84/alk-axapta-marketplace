@@ -25,7 +25,9 @@ try {
     $toolUseId = $hook.tool_use_id
     if (-not $toolUseId) { exit 0 }
 
-    if (-not (Get-TgApproveSecretsPath)) { exit 0 }
+    $secretsPath = Get-TgApproveSecretsPath
+    if (-not $secretsPath) { exit 0 }
+    $secrets = Get-Content -LiteralPath $secretsPath -Raw | ConvertFrom-Json
 
     Remove-StaleApproveStates
     # A new permission prompt in this session means any older pending one was
@@ -33,19 +35,18 @@ try {
     # signal to retire its watcher and strip its stale Telegram buttons).
     Complete-ApproveStatesForSession -SessionId $hook.session_id -OlderThanSeconds 3
 
-    $project = 'unknown'
-    if ($hook.cwd) { $project = Split-Path -Leaf $hook.cwd }
-    $project = Format-HtmlEscape "$project [$env:COMPUTERNAME]"
+    $projectCtx = Get-ProjectContext -Hook $hook -Secrets $secrets
     $summary = Get-ToolSummary -Hook $hook
 
     Write-ApproveState -ToolUseId $toolUseId -State @{
-        status     = 'pending'
-        project    = $project
-        summary    = $summary
-        tool_name  = $hook.tool_name
-        corr_key   = Get-ToolCorrelationKey -ToolInput $hook.tool_input
-        session_id = [string]$hook.session_id
-        created    = [int][double]::Parse((Get-Date -UFormat %s))
+        status      = 'pending'
+        project     = $projectCtx.Display
+        raw_project = $projectCtx.Raw
+        summary     = $summary
+        tool_name   = $hook.tool_name
+        corr_key    = Get-ToolCorrelationKey -ToolInput $hook.tool_input
+        session_id  = [string]$hook.session_id
+        created     = [int][double]::Parse((Get-Date -UFormat %s))
     }
 
     # Cost / trade-off worth knowing: this spawns a hidden watcher process on
