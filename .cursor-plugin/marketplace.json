@@ -6,14 +6,14 @@
   },
   "metadata": {
     "description": "Инструменты для проектов Microsoft Dynamics AX 2012 (ALK). Cursor Team Marketplace — без Claude-only hooks.",
-    "version": "1.8.2",
+    "version": "1.8.3",
     "pluginRoot": "plugins"
   },
   "plugins": [
     {
       "name": "alk-axapta-tools",
       "source": "alk-axapta-tools",
-      "description": "Скиллы setup, mod-comments, project-export/manage, axapta-xpo-helper + XPOTools."
+      "description": "Скиллы setup, mod-comments (объект текущей мод), project-export/manage, axapta-xpo-helper + XPOTools."
     },
     {
       "name": "alk-self-update",

@@ -23,9 +23,10 @@ Microsoft Dynamics AX 2012 (ALK). Один репозиторий обслужи
 | Скилл | Назначение |
 | ----- | ---------- |
 | `setup` | Разовая настройка ENV (ник, AOT-Prod, префикс) |
-| `axapta-mod-comments` | Маркеры модификаций ALK (X++, формы, таблицы) |
+| `axapta-mod-comments` | Маркеры модификаций ALK; на объекте текущей мод — только `classDeclaration`, без header/`+/-` на методах |
 | `axapta-project-export` | Сборка финального `.xpo`-бандла |
 | `axapta-project-manage` | Organize/flatten/sync/cleanup папки `XPO/` |
+| `axapta-xpo-helper` | Resource BINARY (xlsx→xpo) + конвенции `XMLExcelReport_RU` |
 
 XPOTools бандлируется внутри плагина — отдельная установка PATH не нужна.
 Предусловие на машине: **Python ≥ 3.9** и доступ к боевой выгрузке AOT-Prod.
@@ -63,6 +64,7 @@ XPOTools бандлируется внутри плагина — отдельн
 /alk-axapta-tools:axapta-mod-comments
 /alk-axapta-tools:axapta-project-export
 /alk-axapta-tools:axapta-project-manage
+/alk-axapta-tools:axapta-xpo-helper
 /alk-self-update:check-updates
 ```
 
