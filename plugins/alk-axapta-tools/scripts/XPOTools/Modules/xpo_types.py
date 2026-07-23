@@ -96,6 +96,7 @@ _AX_MNEMONIC_ALIASES = {
     "SPV": "PRV",   # Security Privilege
     "SDT": "DUT",   # Security Duty
     "SRL": "ROL",   # Security Role
+    "SRO": "ROL",   # Security Role (AOS Export mnemonic)
     "SPC": "PCY",   # Security Process Cycle
     "SPO": "POL",   # Security Policy
     "SCP": "CDP",   # Security Code Permission
