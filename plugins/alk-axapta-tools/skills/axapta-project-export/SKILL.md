@@ -305,6 +305,13 @@ Formatversion: 1
 | · Tables | `Tables` | `Tables` |
 | · Maps | `Maps` | `Maps` |
 | · Views | `Views` | `Views` |
+| Security (контейнер) | `Security` | `Security` |
+| · Privileges | `Privileges` | `SecurityPrivileges` |
+| · Duties | `Duties` | `SecurityDuties` |
+| · Roles | `Roles` | `SecurityRoles` |
+| · Code Permissions | `Code Permissions` | `SecurityCodePermissions` |
+| · Process Cycles | `Process Cycles` | `SecurityProcessCycles` |
+| · Policies | `Policies` | `SecurityPolicies` |
 
 ### 8. Запись BEGINNODE
 
