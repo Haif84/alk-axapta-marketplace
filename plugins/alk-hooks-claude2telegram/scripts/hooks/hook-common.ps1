@@ -271,7 +271,12 @@ function Get-EffectiveWaitBudget {
     $fallback = 600
     if (-not $Secrets.wait_budget_url) { return $fallback }
     try {
-        $response = Get-RelayJson -Uri $Secrets.wait_budget_url -Secret $Secrets.relay_secret -TimeoutSec 5
+        # chat_id as a query param, not a path segment: these settings became
+        # per-chat_id after other machines were already running an older plugin
+        # that calls the bare URL. Relay treats it as optional, so those keep
+        # working (on defaults) instead of 404-ing.
+        $uri = "$($Secrets.wait_budget_url)?chat_id=$($Secrets.claude_chat_id)"
+        $response = Get-RelayJson -Uri $uri -Secret $Secrets.relay_secret -TimeoutSec 5
         if ($response.ok -and $response.budget_seconds) { return [int]$response.budget_seconds }
     } catch {
     }
@@ -289,7 +294,8 @@ function Get-EffectiveMaxLength {
     $fallback = 3800
     if (-not $Secrets.length_budget_url) { return $fallback }
     try {
-        $response = Get-RelayJson -Uri $Secrets.length_budget_url -Secret $Secrets.relay_secret -TimeoutSec 5
+        $uri = "$($Secrets.length_budget_url)?chat_id=$($Secrets.claude_chat_id)"
+        $response = Get-RelayJson -Uri $uri -Secret $Secrets.relay_secret -TimeoutSec 5
         if ($response.ok -and $response.max_chars) { return [int]$response.max_chars }
     } catch {
     }
@@ -350,6 +356,83 @@ function Get-ToolCorrelationKey {
     if ($ToolInput.file_path) { return [string]$ToolInput.file_path }
     if ($ToolInput.url) { return [string]$ToolInput.url }
     return ($ToolInput | ConvertTo-Json -Compress -Depth 5)
+}
+
+function Get-CompactToolLabel {
+    # One short escaped line for the auto-approve digest list - the full
+    # Get-ToolSummary output is multi-line with <code> blocks, far too big to
+    # stack five of them into a rolling summary message.
+    param($Hook)
+    $name = if ($Hook.tool_name) { [string]$Hook.tool_name } else { 'tool' }
+    $key = [string](Get-ToolCorrelationKey -ToolInput $Hook.tool_input)
+    $key = $key -replace '\r?\n', ' '
+    if ($key.Length -gt 60) { $key = $key.Substring(0, 60) + '...' }
+    # ${name} braces are load-bearing: a bare "$name:" makes PowerShell try to
+    # parse "name:" as a scope qualifier (like $env:PATH) and silently mangles
+    # the string - same family as the "$var?" bug documented in the encoding memory.
+    if ($key) { return Format-HtmlEscape "${name}: $key" }
+    return Format-HtmlEscape $name
+}
+
+function Get-AutoApproveActive {
+    # Is auto-approve currently on for this installation's chat? Called from
+    # PreToolUse, which must return fast, so the answer is cached on disk and
+    # the relay is only asked once a minute. Fails CLOSED (returns $false) on
+    # any error - a network hiccup must never silently disable the approval
+    # gate, only ever leave it in the normal ask-the-human state.
+    param([object]$Secrets)
+    if (-not $Secrets.auto_status_url) { return $false }
+
+    $now = [int][double]::Parse((Get-Date -UFormat %s))
+    if (-not (Test-Path $script:ApproveStateDir)) {
+        New-Item -ItemType Directory -Force -Path $script:ApproveStateDir | Out-Null
+    }
+    $cachePath = Join-Path $script:ApproveStateDir 'auto-status.json'
+
+    try {
+        if (Test-Path $cachePath) {
+            $cached = Get-Content -LiteralPath $cachePath -Raw | ConvertFrom-Json
+            if (($now - [int]$cached.cached_at) -lt 60) {
+                if (-not $cached.enabled) { return $false }
+                # Expiry is enforced locally too, so a window that lapses inside
+                # the cache lifetime stops auto-approving immediately rather
+                # than lingering up to a minute past its own deadline.
+                if ($cached.expires_at -and $now -ge [int]$cached.expires_at) { return $false }
+                return $true
+            }
+        }
+    } catch {
+    }
+
+    try {
+        $uri = "$($Secrets.auto_status_url)?chat_id=$($Secrets.claude_chat_id)"
+        $response = Get-RelayJson -Uri $uri -Secret $Secrets.relay_secret -TimeoutSec 3
+        if (-not $response.ok) { return $false }
+        $enabled = [bool]$response.enabled
+        $expiresAt = if ($response.expires_at) { [int]$response.expires_at } else { 0 }
+        (@{ enabled = $enabled; expires_at = $expiresAt; cached_at = $now } | ConvertTo-Json -Compress) |
+            Set-Content -LiteralPath $cachePath -Encoding UTF8
+        return $enabled
+    } catch {
+        return $false
+    }
+}
+
+function Send-AutoDigestItem {
+    # Adds one line to the rolling auto-approve summary message for this
+    # project (relay owns the message_id and does the send-or-edit). Called
+    # from the detached watcher, never from PreToolUse itself, so the HTTP
+    # round-trip never delays the tool call.
+    param([object]$Secrets, [string]$Project, [string]$Item)
+    if (-not $Secrets.auto_digest_url -or -not $Item) { return }
+    try {
+        Send-RelayJson -Uri $Secrets.auto_digest_url -Secret $Secrets.relay_secret -TimeoutSec 10 -Body @{
+            chat_id = $Secrets.claude_chat_id
+            project = $Project
+            item    = $Item
+        } | Out-Null
+    } catch {
+    }
 }
 
 function Find-ApproveStateFile {

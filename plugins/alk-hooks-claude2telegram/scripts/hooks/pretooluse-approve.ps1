@@ -38,6 +38,46 @@ try {
     $projectCtx = Get-ProjectContext -Hook $hook -Secrets $secrets
     $summary = Get-ToolSummary -Hook $hook
 
+    # Auto-approve window active (set from the phone via the bot's /auto)?
+    # Then answer the permission question right here with "allow" - verified
+    # empirically 2026-07-14 that a PreToolUse allow IS honored by the VS Code
+    # extension, so the native dialog never appears at all. That's why this
+    # path needs no keystroke injection (and can't steal focus) unlike the
+    # phone-answer flow in watch-and-inject.ps1.
+    #
+    # The trade-off this buys: an allow here suppresses PermissionRequest
+    # entirely, so nothing downstream can tell which calls WOULD have prompted
+    # versus which the allowlist would have passed silently. That's exactly why
+    # the notification is a rolling digest rather than a message per call - one
+    # message per matched tool call would mean hundreds an hour.
+    if (Get-AutoApproveActive -Secrets $secrets) {
+        Write-ApproveState -ToolUseId $toolUseId -State @{
+            status        = 'auto'
+            project       = $projectCtx.Display
+            raw_project   = $projectCtx.Raw
+            summary       = $summary
+            digest_label  = Get-CompactToolLabel -Hook $hook
+            tool_name     = $hook.tool_name
+            corr_key      = Get-ToolCorrelationKey -ToolInput $hook.tool_input
+            session_id    = [string]$hook.session_id
+            created       = [int][double]::Parse((Get-Date -UFormat %s))
+        }
+        # Watcher posts the digest line; doing it here would add an HTTP
+        # round-trip to every single tool call before it may proceed.
+        $watcher = Join-Path $PSScriptRoot 'watch-and-inject.ps1'
+        Start-Process -FilePath 'powershell' -WindowStyle Hidden -ArgumentList @(
+            '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$watcher`"", "`"$toolUseId`""
+        ) | Out-Null
+
+        Write-HookOutput -Text (@{
+            hookSpecificOutput = @{
+                hookEventName      = 'PreToolUse'
+                permissionDecision = 'allow'
+            }
+        } | ConvertTo-Json -Compress -Depth 5)
+        exit 0
+    }
+
     Write-ApproveState -ToolUseId $toolUseId -State @{
         status      = 'pending'
         project     = $projectCtx.Display
