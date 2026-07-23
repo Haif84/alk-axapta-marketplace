@@ -362,7 +362,7 @@ ENDNODE
 | Policy | 119 | 1619 | `Security > Policies` |
 | Resource | 21 | 820 | `Resources` |
 
-Мнемоники AOS Export для security: Privilege=`SPV`, Duty=`SDT`, Role=`SRO` (в XPOTools также принимают `SRL` как синоним Role). Канонические ключи каталога — `PRV`/`DUT`/`ROL`.
+Мнемоники AOS Export для security: Privilege=`SPV`, Duty=`SDT`, Role=`SRO`. Канонические ключи каталога — `PRV`/`DUT`/`ROL`.
 
 Если встречается тип, **отсутствующий** в таблице:
 1. Создай в DEV-AOS Shared Project с одним объектом этого типа.
