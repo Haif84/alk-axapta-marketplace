@@ -22,10 +22,23 @@ try {
     $secretsPath = Get-TgApproveSecretsPath
     if (-not $secretsPath) { exit 0 }
     $secrets = Get-Content -LiteralPath $secretsPath -Raw | ConvertFrom-Json
-    if (-not $secrets.ask_url -or -not $secrets.answer_url_base) { exit 0 }
 
     $state = Read-ApproveState -ToolUseId $ToolUseId
     if (-not $state) { exit 0 }
+
+    # Auto-approve path: pretooluse-approve.ps1 already answered the permission
+    # question with "allow", so there is no dialog to race, no PermissionRequest
+    # coming, and nothing to inject. The only thing left is adding this call to
+    # the rolling digest - done here rather than inline in PreToolUse so the
+    # HTTP round-trip never delays the tool call itself. Checked before the
+    # ask_url guard below because this path needs neither /ask nor /answer.
+    if ($state.status -eq 'auto') {
+        Send-AutoDigestItem -Secrets $secrets -Project $state.raw_project -Item $state.digest_label
+        Remove-ApproveState -ToolUseId $ToolUseId
+        exit 0
+    }
+
+    if (-not $secrets.ask_url -or -not $secrets.answer_url_base) { exit 0 }
 
     # Phase 1: don't send anything yet - wait for proof that a dialog exists.
     # 'answered' here means the tool was auto-approved (allowlist) and already
