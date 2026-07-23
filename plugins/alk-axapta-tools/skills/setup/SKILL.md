@@ -26,14 +26,45 @@ disable-model-invocation: true
 ENV-переменные имеют **приоритет** над `config.local.json` (тот лежит в кэше плагина и стирается
 при обновлении) — поэтому вся конфигурация, заданная здесь, переживает обновления плагина.
 
+## Resolve plugin root (Claude + Cursor)
+
+Перед любым вызовом скриптов плагина разреши `$pluginRoot` (в Cursor `CLAUDE_PLUGIN_ROOT`
+часто пуст):
+
+```powershell
+$pluginRoot = $env:CLAUDE_PLUGIN_ROOT
+if ([string]::IsNullOrWhiteSpace($pluginRoot) -or -not (Test-Path "$pluginRoot\scripts\XPOTools")) {
+    $cache = Join-Path $env:USERPROFILE '.claude\plugins\cache\alk-axapta\alk-axapta-tools'
+    if (Test-Path $cache) {
+        $pluginRoot = Get-ChildItem $cache -Directory |
+            Sort-Object Name -Descending |
+            Select-Object -First 1 -ExpandProperty FullName
+    }
+}
+if ([string]::IsNullOrWhiteSpace($pluginRoot) -or -not (Test-Path "$pluginRoot\scripts\XPOTools")) {
+    $cursorPlugins = Join-Path $env:USERPROFILE '.cursor\plugins'
+    if (Test-Path $cursorPlugins) {
+        $hit = Get-ChildItem $cursorPlugins -Directory -Recurse -Filter 'alk-axapta-tools' -ErrorAction SilentlyContinue |
+            Where-Object { Test-Path (Join-Path $_.FullName 'scripts\XPOTools') } |
+            Select-Object -First 1
+        if ($hit) { $pluginRoot = $hit.FullName }
+    }
+}
+if ([string]::IsNullOrWhiteSpace($pluginRoot) -or -not (Test-Path "$pluginRoot\scripts\XPOTools")) {
+    throw 'alk-axapta-tools plugin root not found. Reinstall the plugin (Customize / Claude marketplace) and retry.'
+}
+```
+
+Все пути ниже — через `"$pluginRoot\scripts\..."`, не через голый `${CLAUDE_PLUGIN_ROOT}`.
+
 ## Preflight-конвенция (используется всеми остальными скиллами)
 
 Любой скилл плагина, работающий с X++ модификациями (`axapta-mod-comments`,
-`axapta-project-export`, `axapta-project-manage`), **обязан** в самом начале прогнать
-проверку конфигурации, прежде чем делать что-либо ещё:
+`axapta-project-export`, `axapta-project-manage`), **обязан** в самом начале:
+1) разрешить `$pluginRoot` (блок выше); 2) прогнать проверку конфигурации:
 
 ```powershell
-python "${CLAUDE_PLUGIN_ROOT}/scripts/XPOTools/Modules/config.py"
+python "$pluginRoot\scripts\XPOTools\Modules\config.py"
 ```
 
 Exit code `0` — конфигурация полная, можно продолжать. Exit code `1` — в stderr выведен
@@ -66,11 +97,11 @@ Exit code `0` — конфигурация полная, можно продол
 
 ## Шаг 2. Запустить скрипт
 
-Вызови bundled-скрипт через `${CLAUDE_PLUGIN_ROOT}` (Claude Code подставит реальный путь к кэшу
-плагина). Пример с ником `akaz`, путём к AOT-Prod, ID проекта и аффиксом `alk_`:
+Сначала разреши `$pluginRoot` (§«Resolve plugin root»). Затем вызови bundled-скрипт.
+Пример с ником `akaz`, путём к AOT-Prod, ID проекта и аффиксом `alk_`:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File "${CLAUDE_PLUGIN_ROOT}/scripts/setup-env.ps1" -UserNick akaz -AotPath "E:\Axapta\AOT-Prod" -ProjectId ALK_DEVAX12 -ObjectPrefix alk_
+powershell -NoProfile -ExecutionPolicy Bypass -File "$pluginRoot\scripts\setup-env.ps1" -UserNick akaz -AotPath "E:\Axapta\AOT-Prod" -ProjectId ALK_DEVAX12 -ObjectPrefix alk_
 ```
 
 Если на машине уже стоят старые `ALK_*`-значения и пользователь просто хочет их

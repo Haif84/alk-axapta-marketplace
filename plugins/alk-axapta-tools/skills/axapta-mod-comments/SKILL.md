@@ -178,9 +178,10 @@ ENDSOURCE
 
 ## Workflow при первом редактировании в сессии
 
-0. **Preflight ENV-гейт** (см. [setup](../setup/SKILL.md) §«Preflight-конвенция») — прогони:
+0. **Preflight ENV-гейт** (см. [setup](../setup/SKILL.md) §«Resolve plugin root» и
+   §«Preflight-конвенция») — разреши `$pluginRoot`, затем прогони:
    ```powershell
-   python "${CLAUDE_PLUGIN_ROOT}/scripts/XPOTools/Modules/config.py"
+   python "$pluginRoot\scripts\XPOTools\Modules\config.py"
    ```
    Ненулевой exit code → **остановись**, покажи пользователю ошибки из stderr, направь на
    `/alk-axapta-tools:setup`. Не продолжай работу без полной конфигурации — не спрашивай
@@ -260,7 +261,7 @@ prefix и suffix никогда не заданы одновременно.
 ### Зарезервированные слова X++
 
 Список зарезервированных слов X++ (компилятор AX не даст объявить с таким именем
-**параметр метода, локальную переменную или поле класса**) — `${CLAUDE_PLUGIN_ROOT}/scripts/XPOTools/Modules/reserved_words.py`
+**параметр метода, локальную переменную или поле класса**) — `"$pluginRoot\scripts\XPOTools\Modules\reserved_words.py"`
 (`RESERVED_WORDS`, сравнение регистронезависимое; помимо официальных ключевых слов
 X++ там же — проектные добавления ALK, например `sessionId`). Источник основной части —
 реальный экспортированный список зарезервированных слов Axapta, сверенный с официальной

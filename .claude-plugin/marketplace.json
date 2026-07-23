@@ -4,13 +4,13 @@
     "name": "ALK Development Team"
   },
   "description": "Магазин скиллов: инструменты для работы с проектами Microsoft Dynamics AX 2012 (ALK).",
-  "version": "1.8.0",
+  "version": "1.8.1",
   "plugins": [
     {
       "name": "alk-axapta-tools",
       "source": "./plugins/alk-axapta-tools",
       "description": "Скиллы setup, axapta-mod-comments, axapta-project-export, axapta-project-manage + инструментарий XPOTools.",
-      "version": "1.6.1",
+      "version": "1.6.2",
       "author": {
         "name": "ALK Development Team"
       }
@@ -27,8 +27,8 @@
     {
       "name": "alk-self-update",
       "source": "./plugins/alk-self-update",
-      "description": "Cron-уведомитель о новых версиях каждые 2 часа (8:30-22:30) + CLI-команды применения обновления для VS Code extension.",
-      "version": "1.2.1",
+      "description": "Проверка обновлений маркетплейса: Claude — cron/CLI; Cursor — Customize/Reload. Dual-runtime check-updates.",
+      "version": "1.3.0",
       "author": {
         "name": "ALK Development Team"
       }

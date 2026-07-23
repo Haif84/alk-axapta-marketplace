@@ -1,0 +1,24 @@
+{
+  "name": "alk-axapta",
+  "displayName": "ALK Axapta",
+  "owner": {
+    "name": "ALK Development Team"
+  },
+  "metadata": {
+    "description": "Инструменты для проектов Microsoft Dynamics AX 2012 (ALK). Cursor Team Marketplace — без Claude-only hooks.",
+    "version": "1.8.1",
+    "pluginRoot": "plugins"
+  },
+  "plugins": [
+    {
+      "name": "alk-axapta-tools",
+      "source": "alk-axapta-tools",
+      "description": "Скиллы setup, axapta-mod-comments, axapta-project-export, axapta-project-manage + XPOTools."
+    },
+    {
+      "name": "alk-self-update",
+      "source": "alk-self-update",
+      "description": "Проверка обновлений маркетплейса: Claude — cron/CLI; Cursor — инструкция Customize/Reload."
+    }
+  ]
+}
