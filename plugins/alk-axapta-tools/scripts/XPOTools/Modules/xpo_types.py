@@ -95,7 +95,7 @@ _AX_MNEMONIC_ALIASES = {
     "UTG": "EDT",   # EDT Guid
     "SPV": "PRV",   # Security Privilege
     "SDT": "DUT",   # Security Duty
-    "SRL": "ROL",   # Security Role
+    "SRO": "ROL",   # Security Role (AOS Export: ***Element: SRO)
     "SPC": "PCY",   # Security Process Cycle
     "SPO": "POL",   # Security Policy
     "SCP": "CDP",   # Security Code Permission

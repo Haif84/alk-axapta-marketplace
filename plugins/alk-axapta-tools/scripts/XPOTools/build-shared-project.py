@@ -98,7 +98,7 @@ NAME_RES = {
     "UTG": re.compile(r"^\s*USERTYPE\s+#(\S+)"),
     "SPV": re.compile(r"^\s*PRIVILEGE\s+#(\S+)"),
     "SDT": re.compile(r"^\s*DUTY\s+#(\S+)"),
-    "SRL": re.compile(r"^\s*ROLE\s+#(\S+)"),
+    "SRO": re.compile(r"^\s*ROLE\s+#(\S+)"),  # AOS Export: ***Element: SRO
     "SPC": re.compile(r"^\s*PROCESSCYCLE\s+#(\S+)"),
     "SPO": re.compile(r"^\s*POLICY\s+#(\S+)"),
     "SCP": re.compile(r"^\s*CODEPERMISSION\s+#(\S+)"),
