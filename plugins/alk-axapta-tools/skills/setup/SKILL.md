@@ -36,8 +36,10 @@ $pluginRoot = $env:CLAUDE_PLUGIN_ROOT
 if ([string]::IsNullOrWhiteSpace($pluginRoot) -or -not (Test-Path "$pluginRoot\scripts\XPOTools")) {
     $cache = Join-Path $env:USERPROFILE '.claude\plugins\cache\alk-axapta\alk-axapta-tools'
     if (Test-Path $cache) {
+        # Кэш накапливает несколько версий (напр. 1.6.9 и 1.6.10) — сортируем по
+        # [version], а не по имени: лексически "1.6.9" > "1.6.10", выбралась бы старая.
         $pluginRoot = Get-ChildItem $cache -Directory |
-            Sort-Object Name -Descending |
+            Sort-Object { try { [version]$_.Name } catch { [version]'0.0' } } -Descending |
             Select-Object -First 1 -ExpandProperty FullName
     }
 }
