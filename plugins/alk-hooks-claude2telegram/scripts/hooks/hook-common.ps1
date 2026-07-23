@@ -383,7 +383,14 @@ function Get-AutoApproveActive {
     param([object]$Secrets)
     if (-not $Secrets.auto_status_url) { return $false }
 
-    $now = [int][double]::Parse((Get-Date -UFormat %s))
+    # NOT Get-Date -UFormat %s here. Windows PowerShell 5.1's %s returns the
+    # epoch shifted by the local UTC offset (+10800s on MSK) - a known 5.1 bug.
+    # The approve-state helpers below get away with it because they only ever
+    # compare their own %s values to each other, but expires_at comes from the
+    # relay in real UTC: with %s the clock would read 3h ahead and every
+    # auto-approve window shorter than the UTC offset would look already
+    # expired. Verified live 2026-07-23 - a 1-hour window never activated.
+    $now = [int][DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
     if (-not (Test-Path $script:ApproveStateDir)) {
         New-Item -ItemType Directory -Force -Path $script:ApproveStateDir | Out-Null
     }
