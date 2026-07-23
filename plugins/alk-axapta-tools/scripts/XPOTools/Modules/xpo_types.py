@@ -66,12 +66,12 @@ XPO_TYPES = {
     "WAT": {"utiltype": 95, "nodetype": 1409, "group_path": ["Workflow", "Automated Tasks"], "group_type": "Automated Tasks", "file_prefix": "WorkflowAutomatedTask_"},
     "WFY": {"utiltype": 68, "nodetype": 1412, "group_path": ["Workflow", "Workflow Types"], "group_type": "Workflow Types", "file_prefix": "WorkflowType_"},
     "WFH": {"utiltype": 139, "nodetype": 1397, "group_path": ["Workflow", "Providers", "HierarchyAssignment"], "group_type": "HierarchyAssignment", "file_prefix": "WorkflowHierarchyProvider_"},
-    "CDP": {"utiltype": 115, "nodetype": 1608, "group_path": ["Security", "Code Permissions"], "group_type": "Code Permissions", "file_prefix": "CodePermission_"},
-    "PRV": {"utiltype": 134, "nodetype": 1628, "group_path": ["Security", "Privileges"], "group_type": "Privileges", "file_prefix": "Privilege_"},
-    "DUT": {"utiltype": 135, "nodetype": 1630, "group_path": ["Security", "Duties"], "group_type": "Duties", "file_prefix": "Duty_"},
-    "ROL": {"utiltype": 133, "nodetype": 1626, "group_path": ["Security", "Roles"], "group_type": "Roles", "file_prefix": "Role_"},
-    "PCY": {"utiltype": 136, "nodetype": 1636, "group_path": ["Security", "Process Cycles"], "group_type": "Process Cycles", "file_prefix": "ProcessCycle_"},
-    "POL": {"utiltype": 119, "nodetype": 1619, "group_path": ["Security", "Policies"], "group_type": "Policies", "file_prefix": "Policy_"},
+    "CDP": {"utiltype": 115, "nodetype": 1608, "group_path": ["Security", "Code Permissions"], "group_type": "SecurityCodePermissions", "file_prefix": "CodePermission_"},
+    "PRV": {"utiltype": 134, "nodetype": 1628, "group_path": ["Security", "Privileges"], "group_type": "SecurityPrivileges", "file_prefix": "Privilege_"},
+    "DUT": {"utiltype": 135, "nodetype": 1630, "group_path": ["Security", "Duties"], "group_type": "SecurityDuties", "file_prefix": "Duty_"},
+    "ROL": {"utiltype": 133, "nodetype": 1626, "group_path": ["Security", "Roles"], "group_type": "SecurityRoles", "file_prefix": "Role_"},
+    "PCY": {"utiltype": 136, "nodetype": 1636, "group_path": ["Security", "Process Cycles"], "group_type": "SecurityProcessCycles", "file_prefix": "ProcessCycle_"},
+    "POL": {"utiltype": 119, "nodetype": 1619, "group_path": ["Security", "Policies"], "group_type": "SecurityPolicies", "file_prefix": "Policy_"},
     "RES": {"utiltype": 21, "nodetype": 820, "group_path": ["Resources"], "group_type": "Resources", "file_prefix": "Resource_"},
 }
 

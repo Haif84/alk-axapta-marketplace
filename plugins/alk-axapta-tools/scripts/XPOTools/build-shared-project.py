@@ -229,6 +229,27 @@ def emit_group(indent: int, name: str, gtype: str,
     return "\n".join(out)
 
 
+# ProjectGroupType enum в AX часто НЕ совпадает с отображаемым Name группы
+# (AOS Export: GROUP #Privileges + ProjectGroupType #SecurityPrivileges).
+PROJECT_GROUP_TYPE_OVERRIDES = {
+    "Data Dictionary": "DataDictionary",
+    "Code Permissions": "SecurityCodePermissions",
+    "Privileges": "SecurityPrivileges",
+    "Duties": "SecurityDuties",
+    "Roles": "SecurityRoles",
+    "Process Cycles": "SecurityProcessCycles",
+    "Policies": "SecurityPolicies",
+}
+
+
+def resolve_project_group_type(name: str, nodes: List[Dict]) -> str:
+    if nodes:
+        gt = nodes[0].get("group_type")
+        if gt:
+            return gt
+    return PROJECT_GROUP_TYPE_OVERRIDES.get(name, name)
+
+
 def build_tree(objects: List[Dict]) -> Dict:
     tree: Dict = {}
     for o in objects:
@@ -257,7 +278,8 @@ def emit_tree(tree: Dict, indent: int, parent_name: str = "") -> List[str]:
     for name in _ordered_keys(list(tree.keys()), parent_name):
         node = tree[name]
         sub_strings = emit_tree(node["subs"], indent + 2, parent_name=name) if node["subs"] else []
-        out.append(emit_group(indent, name, name, node["nodes"], sub_strings))
+        gtype = resolve_project_group_type(name, node["nodes"])
+        out.append(emit_group(indent, name, gtype, node["nodes"], sub_strings))
     return out
 
 
@@ -377,6 +399,7 @@ def collect_objects(root: pathlib.Path) -> List[Dict]:
             "utiltype": meta["utiltype"],
             "nodetype": meta["nodetype"],
             "group_path": list(meta["group_path"]),
+            "group_type": meta["group_type"],
             "file_path": str(xpo),
             "file_prefix": meta["file_prefix"],
         })
