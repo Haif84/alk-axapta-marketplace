@@ -8,6 +8,7 @@ Microsoft Dynamics AX 2012 (X++).
 | Команда | Что делает |
 |---------|------------|
 | `build-shared-project` | Собирает финальный `SharedProject_*.xpo` (AOT Project + тела всех его объектов) из папки `XPO/*.xpo`. |
+| `build-resource-xpo` | Собирает AOT `Resource` `.xpo` из бинарника (xlsx и др.) с корректным BINARY-wrapper (`FF FF FF`). |
 | `validate-xpo` | Проверяет xpo-файлы: BOM+CRLF, балансировка блоков, mojibake, наличие маркеров модификаций, уникальность имён объектов. |
 | `split-shared-project` | Обратная операция к `build-shared-project`: нарезает бандл обратно на отдельные `<Type>_<Name>.xpo`. |
 | `fix-mojibake` | Чинит файлы с двойной перекодировкой CP1251↔UTF-8. |

@@ -1,7 +1,7 @@
 {
   "name": "alk-axapta-tools",
-  "description": "Скиллы для работы с проектами Microsoft Dynamics AX 2012 (ALK): первичная настройка (setup, AX_*-переменные), комментарии модификаций, сборка XPO-бандла, управление структурой XPO/. Включает XPOTools (Python-инструментарий; путь резолвится через CLAUDE_PLUGIN_ROOT или fallback-кэш).",
-  "version": "1.6.2",
+  "description": "Скиллы для работы с проектами Microsoft Dynamics AX 2012 (ALK): setup, mod-comments, project-export/manage, axapta-xpo-helper (Resource BINARY + XMLExcelReport_RU). Включает XPOTools (Python; CLAUDE_PLUGIN_ROOT / fallback-кэш).",
+  "version": "1.6.3",
   "author": {
     "name": "ALK Development Team"
   },
