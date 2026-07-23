@@ -17,8 +17,11 @@ Microsoft Dynamics AX 2012 (X++).
 ## Установка
 
 Через плагин `alk-axapta-tools` (основной путь) — конфигурация задаётся ENV-переменными
-через скилл `/alk-axapta-tools:setup` (см. `../setup-env.ps1`), PATH не требуется — команды
-вызываются через полный путь `${CLAUDE_PLUGIN_ROOT}/scripts/XPOTools/...`.
+через скилл `/alk-axapta-tools:setup` (см. `../setup-env.ps1`), PATH не требуется.
+Корень плагина: `$env:CLAUDE_PLUGIN_ROOT`, иначе новейшая папка в
+`%USERPROFILE%\.claude\plugins\cache\alk-axapta\alk-axapta-tools\*`, иначе поиск
+`alk-axapta-tools` под `%USERPROFILE%\.cursor\plugins\` (см. скилл `setup`
+§«Resolve plugin root»). Команды: `"$pluginRoot\scripts\XPOTools\..."`.
 
 Standalone-клон (вне плагина):
 

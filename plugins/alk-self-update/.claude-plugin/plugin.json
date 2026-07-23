@@ -1,7 +1,7 @@
 {
   "name": "alk-self-update",
-  "description": "Проверка обновлений маркетплейса alk-axapta. Cron-уведомитель каждые 2 часа (8:30-22:30) для долго открытых сессий; в интерактивном режиме показывает CLI-команды применения (claude plugin marketplace update / claude plugin update) — актуально для VS Code extension, где /plugin и /reload-plugins недоступны.",
-  "version": "1.2.1",
+  "description": "Проверка обновлений маркетплейса alk-axapta. Dual-runtime: Claude Code — cron + claude plugin update; Cursor без Claude CLI — список коммитов и инструкция Customize/Reload / Team Marketplace Auto Refresh.",
+  "version": "1.3.0",
   "author": {
     "name": "ALK Development Team"
   },

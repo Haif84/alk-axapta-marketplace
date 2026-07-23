@@ -1,0 +1,10 @@
+{
+  "name": "alk-self-update",
+  "displayName": "ALK Self Update",
+  "description": "Проверка обновлений маркетплейса alk-axapta. Claude Code: cron + claude plugin update. Cursor без Claude CLI: список коммитов + Customize/Reload / Team Marketplace Auto Refresh.",
+  "version": "1.3.0",
+  "author": {
+    "name": "ALK Development Team"
+  },
+  "license": "UNLICENSED"
+}

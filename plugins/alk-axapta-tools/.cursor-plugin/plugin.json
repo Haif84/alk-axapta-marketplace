@@ -1,0 +1,10 @@
+{
+  "name": "alk-axapta-tools",
+  "displayName": "ALK Axapta Tools",
+  "description": "Скиллы для работы с проектами Microsoft Dynamics AX 2012 (ALK): первичная настройка (setup, AX_*-переменные), комментарии модификаций, сборка XPO-бандла, управление структурой XPO/. Включает XPOTools (Python).",
+  "version": "1.6.2",
+  "author": {
+    "name": "ALK Development Team"
+  },
+  "license": "UNLICENSED"
+}

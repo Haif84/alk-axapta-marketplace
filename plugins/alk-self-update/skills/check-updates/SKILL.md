@@ -1,36 +1,36 @@
 ---
 name: check-updates
-description: Проверяет, есть ли новые коммиты в маркетплейсе alk-axapta (Haif84/alk-axapta-marketplace). В фоне (cron) только уведомляет через PushNotification, файлы не трогает. В интерактивном режиме показывает CLI-команды для применения обновления (claude plugin marketplace update / claude plugin update) и с согласия пользователя может их выполнить — актуально для VS Code extension, где /plugin и /reload-plugins недоступны. Ставит cron на фоновую проверку каждые 2 часа (8:30-22:30, минута рандомизирована 31-35 на каждой машине — не грузит инфраструктуру одновременными срабатываниями); job session-only — не переживает закрытие сессии/рестарт VS Code, живёт максимум 7 дней и только пока сессия открыта. Триггеры — «проверь обновления alk», «check updates», «/check-updates», а также фоновый запуск из CronCreate по маркеру ФОНОВАЯ_ПРОВЕРКА_ALK.
+description: Проверяет новые коммиты в маркетплейсе alk-axapta (Haif84/alk-axapta-marketplace). Dual-runtime — Claude Code (CronCreate/PushNotification + claude plugin update) и Cursor без Claude CLI (список коммитов + Customize/Reload / Team Marketplace Auto Refresh, без cron). Триггеры — «проверь обновления alk», «check updates», «/check-updates», а также фоновый запуск из CronCreate по маркеру ФОНОВАЯ_ПРОВЕРКА_ALK (только Claude).
 ---
 
 # check-updates
 
-Проверяет, есть ли новые коммиты в маркетплейсе `Haif84/alk-axapta-marketplace`, и **уведомляет**
-о них.
+Проверяет, есть ли новые коммиты в `Haif84/alk-axapta-marketplace`, и **уведомляет** о них.
+Файлы плагина сам не трогает (кроме файла состояния вне кэша).
 
-Этот скилл нужен только для долго открытых сессий, когда VS Code не перезапускается сутками и
-нативная проверка на старте не срабатывает. Важно: сам cron-джоб (см. Шаг 5) session-only —
-если сессия закроется или VS Code перезапустится, джоб исчезает вместе с ней (подробнее в Шаге 5).
-Если VS Code перезапускается регулярно — фоновая проверка не нужна, достаточно нативной проверки
-на старте.
+## Детект среды (в начале)
 
-**Важно про среду VS Code extension**: в native VS Code extension (в отличие от отдельного
-CLI/терминала) слэш-команды `/plugin marketplace update` и `/reload-plugins` **недоступны**
-("isn't available in this environment"), и простой рестарт VS Code (Developer: Reload Window)
-сам по себе **не гарантирует** подтягивание новой версии, даже при включённом auto-update
-тумблере — проверено 03.07.2026. Рабочий путь — CLI-команды `claude plugin marketplace update` /
-`claude plugin update <plugin>@<marketplace>` из обычного терминала (см. Шаг 4).
+Определи runtime **до** шагов уведомления/cron:
+
+1. **Claude runtime** — если доступен инструмент `CronCreate` **или** в PATH находится
+   команда `claude` (или `claude.exe` внутри VS Code extension
+   `*\anthropic.claude-code-*\resources\native-binary\`).
+2. Иначе — **Cursor runtime** (нет Claude CLI / нет CronCreate).
+
+| | Claude runtime | Cursor runtime |
+|--|----------------|----------------|
+| Фон (маркер `ФОНОВАЯ_ПРОВЕРКА_ALK`) | `PushNotification` | кратко в чат **или** молчать, если нельзя пуш |
+| Интерактив: как обновить | `claude plugin marketplace update` + `claude plugin update …@alk-axapta` | Customize → обновить плагин → Reload Window; админу — Refresh / Auto Refresh Team Marketplace |
+| CronCreate (шаг 5) | да (session-only) | **не вызывать** |
 
 ## Когда вызывать
 
-1. **По запросу** — пользователь написал `/check-updates` или попросил проверить обновления.
-2. **Из CronCreate** — промпт содержит маркер `ФОНОВАЯ_ПРОВЕРКА_ALK` → тихий фоновый режим,
-   без вопросов пользователю.
+1. **По запросу** — `/check-updates` или «проверь обновления alk».
+2. **Из CronCreate** (только Claude) — промпт с маркером `ФОНОВАЯ_ПРОВЕРКА_ALK` → тихий фон.
 
 ## Файл состояния
 
-`$env:USERPROFILE\.claude\alk-update-state.json` — **вне** кэша плагинов (кэш затирается при
-обновлении).
+`$env:USERPROFILE\.claude\alk-update-state.json` — **вне** кэша плагинов.
 
 ```json
 {
@@ -41,10 +41,10 @@ CLI/терминала) слэш-команды `/plugin marketplace update` и 
 }
 ```
 
-- `last_check` — ISO UTC, время последней проверки
-- `last_known_sha` — SHA коммита, известного пользователю (текущая установленная версия)
-- `pending_sha` — SHA, если пользователь уже был уведомлён, но ещё не обновился
-- `cron_scheduled` — установлен ли durable CronCreate
+- `last_check` — ISO UTC
+- `last_known_sha` — известный пользователю SHA
+- `pending_sha` — SHA, о котором уже уведомляли, но ещё не обновились
+- `cron_scheduled` — имел ли смысл cron (в Cursor всегда можно писать `false`)
 
 ## Алгоритм
 
@@ -55,31 +55,38 @@ $statePath = "$env:USERPROFILE\.claude\alk-update-state.json"
 $state = if (Test-Path $statePath) { Get-Content $statePath -Raw | ConvertFrom-Json } else { $null }
 ```
 
-Если файла нет — seed `last_known_sha` из установленной версии:
+Если файла нет — seed `last_known_sha`:
 
 ```powershell
-$ip = Get-Content "$env:USERPROFILE\.claude\plugins\installed_plugins.json" -Raw | ConvertFrom-Json
-# Взять gitCommitSha любого alk-плагина из маркетплейса 'alk-axapta'
+# Claude cache
+$ipPath = "$env:USERPROFILE\.claude\plugins\installed_plugins.json"
+if (Test-Path $ipPath) {
+    $ip = Get-Content $ipPath -Raw | ConvertFrom-Json
+    # Взять gitCommitSha любого плагина *@alk-axapta
+}
+# Cursor: если installed_plugins.json нет — оставить last_known_sha пустым;
+# первое сравнение с remote всё равно покажет «есть коммиты» только при расхождении
+# после того как SHA один раз сохранён.
 ```
 
-### Шаг 2. Запрашиваем удалённый SHA (без авторизации — репо публичный)
+### Шаг 2. Удалённый SHA
 
 ```powershell
 $remoteSha = (git ls-remote https://github.com/Haif84/alk-axapta-marketplace HEAD).Split("`t")[0]
 ```
 
-Если `git` недоступен или нет сети — сообщить пользователю (в фоне молчать), обновить только
-`last_check`, перейти к шагу 5.
+Нет `git`/сети — интерактив: сообщить; фон: молчать. Обновить только `last_check` → шаг 5
+(в Cursor шаг 5 — no-op).
 
-### Шаг 3. Сравниваем SHA
+### Шаг 3. Сравнение
 
 **Нет изменений** (`$remoteSha` == `last_known_sha`):
 - Обновить `last_check`
-- Интерактив: кратко «маркетплейс alk-axapta актуален ✓»
+- Интерактив: «маркетплейс alk-axapta актуален»
 - Фон: молчать
-- Перейти к шагу 5
+- → шаг 5
 
-**Есть изменения** — получить список новых коммитов (если `gh` доступен):
+**Есть изменения** — список коммитов через `gh`, если доступен:
 
 ```powershell
 $commits = gh api "repos/Haif84/alk-axapta-marketplace/commits?sha=master&per_page=20" | ConvertFrom-Json
@@ -90,93 +97,81 @@ foreach ($c in $commits) {
 }
 ```
 
-Если `gh` недоступен — показать только короткий `$remoteSha`.
+Иначе — только короткий `$remoteSha`.
 
 ### Шаг 4. Уведомление
 
-**Фоновый режим** (вызвано из CronCreate, маркер `ФОНОВАЯ_ПРОВЕРКА_ALK`):
-- Отправить `PushNotification`: `"alk-axapta: доступно обновление ($($newCommits.Count) коммитов). Спросите ассистента про /check-updates, чтобы обновить."`
-- Сохранить `pending_sha = $remoteSha`, обновить `last_check`
-- **Не выполнять** `claude plugin update` в фоне — обновление плагина мид-сессии без ведома
-  пользователя может незаметно поменять поведение других скиллов; CLI-команды применяются
-  только в интерактивном режиме и только с согласия пользователя (см. ниже)
-- Выйти без интерактива
+#### Фон (`ФОНОВАЯ_ПРОВЕРКА_ALK`)
 
-**Интерактивный режим**:
-- Показать список новых коммитов.
-- Показать команды, которыми обновление применяется **прямо сейчас** (работают и в VS Code
-  extension, и в CLI — в отличие от `/plugin`/`/reload-plugins`, см. примечание выше):
-  ```powershell
-  claude plugin marketplace update alk-axapta
-  $ip = Get-Content "$env:USERPROFILE\.claude\plugins\installed_plugins.json" -Raw | ConvertFrom-Json
-  $ip.plugins.PSObject.Properties.Name |
-      Where-Object { $_ -like "*@alk-axapta" } |
-      ForEach-Object { claude plugin update $_ }
-  ```
-  (обновляет разом все установленные плагины из этого маркетплейса — не только
-  `alk-axapta-tools`; короткое имя без `@alk-axapta` вернёт `Plugin "X" not found`).
-- **Спросить пользователя**, выполнить ли эти команды сейчас (через Bash/PowerShell). Если
-  согласен — выполнить, затем явно сказать: «Restart to apply changes» — команда сама об этом
-  сообщит, нужен рестарт VS Code (Developer: Reload Window), чтобы применилось.
-- После рестарта, если пользователь попросит проверить — сверить `installed_plugins.json`
-  (`version`/`gitCommitSha`) с ожидаемым значением из Шага 2.
-- Если `pending_sha` == `$remoteSha` — добавить «(вы уже видели это уведомление)».
+- **Claude:** `PushNotification`:
+  `"alk-axapta: доступно обновление ($($newCommits.Count) коммитов). Спросите ассистента про /check-updates."`
+- **Cursor:** если есть аналог push — использовать; иначе одна короткая строка в ответ
+  агента **или** молчать (не спамить). Не запускать обновление.
+- Сохранить `pending_sha = $remoteSha`, обновить `last_check`. Выйти.
 
-### Шаг 5. CronCreate на регулярную проверку (каждые 2 часа, 8:30-22:30)
+#### Интерактив
 
-Если `cron_scheduled` не установлен, или выполняется ручной `/check-updates`:
+Показать список новых коммитов. Если `pending_sha` == `$remoteSha` — добавить
+«(вы уже видели это уведомление)».
 
-**Выбери случайную минуту от 31 до 35 включительно** (один раз на этой машине — не на каждое
-срабатывание; cron не поддерживает секундную точность и «случайно каждый раз», поэтому джиттер
-делается через фиксацию случайной минуты при первой настройке). Это разводит момент фактического
-срабатывания между разными машинами команды на несколько минут, чтобы не грузить инфраструктуру
-одновременными запросами ровно в :30.
+**Claude runtime — как применить:**
 
-Вызвать `CronCreate`:
+```powershell
+claude plugin marketplace update alk-axapta
+$ip = Get-Content "$env:USERPROFILE\.claude\plugins\installed_plugins.json" -Raw | ConvertFrom-Json
+$ip.plugins.PSObject.Properties.Name |
+    Where-Object { $_ -like "*@alk-axapta" } |
+    ForEach-Object { claude plugin update $_ }
 ```
-schedule = "<M> 8-22/2 * * *"  # <M> — случайное 31-35, выбранное один раз для этой машины;
-                                 # 8-22/2 = 8,10,12,14,16,18,20,22 — каждые 2 часа с 8:30 до 22:30,
-                                 # не ночью
-durable  = true                 # параметр обязателен API, но НЕ гарантирует переживание рестарта
-                                 # (см. предупреждение ниже)
+
+Спросить согласие; при согласии выполнить; затем Reload Window.
+Короткое имя без `@alk-axapta` → `Plugin "X" not found`.
+
+**Cursor runtime — как применить (без `claude plugin`):**
+
+1. Разработчик: **Customize** → обновить/переустановить `alk-axapta-tools` /
+   `alk-self-update` → **Developer: Reload Window**
+2. Админ team marketplace: Dashboard → Plugins → **Refresh** или дождаться
+   **Auto Refresh** после push в GitHub
+3. Не предлагать `git pull` в кэш и не предлагать установить Claude CLI «только ради update»
+
+После рестарта по просьбе пользователя сверить версии с ожидаемым SHA.
+
+### Шаг 5. CronCreate (только Claude runtime)
+
+Если runtime = Cursor — **пропустить** этот шаг (`cron_scheduled = false` в состоянии).
+
+Если Claude и (`cron_scheduled` не true **или** ручной `/check-updates`):
+
+Случайная минута `M` ∈ [31..35] один раз на машину (сохранить в state при желании).
+
+`CronCreate`:
+```
+schedule = "<M> 8-22/2 * * *"
+durable  = true   # API требует; реально session-only
 prompt   = "ФОНОВАЯ_ПРОВЕРКА_ALK: проверь обновления маркетплейса alk-axapta.
-            Тихий фоновый режим: если нет обновлений — молчи, обнови last_check.
-            Если есть новые коммиты — отправь PushNotification, сохрани pending_sha.
-            Не задавай вопросов пользователю и не запускай обновление сам."
+            Тихий фон: нет обновлений — молчи. Есть — PushNotification, pending_sha.
+            Не спрашивай и не обновляй сам."
 ```
 
-Пример при выпавшем `M=33`: `schedule = "33 8-22/2 * * *"` → срабатывает в 8:33, 10:33, 12:33, ...,
-22:33 каждый день.
+Пример `M=33`: 8:33, 10:33, …, 22:33.
 
-**⚠️ `durable: true` сейчас не даёт заявленной персистентности.** По текущей схеме инструмента
-`CronCreate`, параметр `durable` **не имеет эффекта** — дословно: «durable persistence is not
-available. All jobs are session-only (in-memory, gone when this Claude session ends)». То есть
-задача **не переживает** закрытие текущей сессии/VS Code, вопреки более раннему предположению в
-этом файле («переживает рестарт, до 7 дней»). Реально: живёт максимум 7 дней **и** только пока
-сессия открыта — что раньше случится, то и остановит проверку. Если сессия закрылась/VS Code
-перезапущен — cron нужно ставить заново (следующий явный/автоматический вызов `check-updates`
-в новой сессии сделает это сам, т.к. `cron_scheduled` в состоянии предыдущей сессии не значит,
-что джоб всё ещё жив). Проверено 08.07.2026.
+**Важно:** `durable: true` не даёт персистентности — job session-only, максимум 7 дней
+или до закрытия сессии. После рестарта следующий `/check-updates` поставит cron снова.
 
-Установить `cron_scheduled: true`.
-
-### Шаг 6. Сохраняем состояние
+### Шаг 6. Сохранить состояние
 
 ```powershell
 @{
     last_check      = [DateTime]::UtcNow.ToString("o")
     last_known_sha  = $remoteSha    # или прежнее, если нет сети
-    pending_sha     = $pendingSha   # null или SHA
-    cron_scheduled  = $true
+    pending_sha     = $pendingSha
+    cron_scheduled  = $cronScheduled  # true только если CronCreate реально вызван
 } | ConvertTo-Json | Set-Content -Encoding UTF8 $statePath
 ```
 
 ## Примечание
 
-В отдельном CLI/терминале обновление штатно применяется через `/plugin marketplace update
-alk-axapta` + `/reload-plugins`, либо подтягивается само при старте, если для магазина включён
-auto-update тумблер. В **VS Code extension** обе слэш-команды недоступны и рестарт сам по себе
-не гарантирует обновление — используйте CLI-команды из Шага 4 (`claude plugin marketplace
-update` / `claude plugin update <plugin>@<marketplace>`) через Bash/PowerShell с согласия
-пользователя, затем попросите перезапустить VS Code. Никакого ручного копирования файлов в
-кэш — только официальные CLI-команды `claude plugin ...`.
+Никакого ручного копирования файлов в кэш плагинов. Источник истины — GitHub
+`Haif84/alk-axapta-marketplace` + официальные механизмы IDE (Claude plugin CLI или
+Cursor Team Marketplace / Customize).
