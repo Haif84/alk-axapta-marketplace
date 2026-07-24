@@ -33,12 +33,23 @@ try {
     # HTTP round-trip never delays the tool call itself. Checked before the
     # ask_url guard below because this path needs neither /ask nor /answer.
     if ($state.status -eq 'auto') {
-        Send-AutoDigestItem -Secrets $secrets -Project $state.raw_project -Item $state.digest_label
+        $autoScore = if ($null -ne $state.risk_score) { [int]$state.risk_score } else { $null }
+        Send-AutoDigestItem -Secrets $secrets -Project $state.raw_project `
+            -Item $state.digest_label -Score $autoScore
         Remove-ApproveState -ToolUseId $ToolUseId
         exit 0
     }
 
     if (-not $secrets.ask_url -or -not $secrets.answer_url_base) { exit 0 }
+
+    # Paranoid mode scored this call ABOVE the threshold, so PreToolUse declined
+    # to auto-approve it and handed it to the normal gate. Two things can happen
+    # and they need opposite responses, so this watcher waits much longer than
+    # usual: PostToolUse fires on command COMPLETION, not on dialog dismissal, so
+    # a slow allowlisted command can finish well after the normal 15s - and that
+    # is exactly the case the warning exists for.
+    $paranoidHeld = [bool]$state.paranoid
+    if ($paranoidHeld) { $promptWaitBudgetSec = 120 }
 
     # Phase 1: don't send anything yet - wait for proof that a dialog exists.
     # 'answered' here means the tool was auto-approved (allowlist) and already
@@ -50,7 +61,24 @@ try {
     while ((Get-Date) -lt $promptDeadline) {
         $current = Read-ApproveState -ToolUseId $ToolUseId
         if (-not $current) { exit 0 }
-        if ($current.status -eq 'answered') { Remove-ApproveState -ToolUseId $ToolUseId; exit 0 }
+        if ($current.status -eq 'answered') {
+            # 'ran' is written only by PostToolUse, so this is the one case where
+            # we know the tool actually executed with no dialog at all - i.e. the
+            # settings.json allowlist passed a call paranoid mode had flagged as
+            # risky. Nobody saw it, so say so after the fact. (Checking the status
+            # alone would misfire: the session sweeps write 'answered' too.)
+            if ($paranoidHeld -and $current.ran) {
+                $warnRisk = "$([int]$state.risk_score)/99"
+                $warnReason = if ($state.risk_reason) { " — $(Format-HtmlEscape $state.risk_reason)" } else { '' }
+                Send-ProjectNotify -Secrets $secrets -Project $state.raw_project -Text (
+                    "⚠️ $($state.project) — выполнено без подтверждения (разрешено списком в settings.json)" +
+                    "`nОценка риска: <b>$warnRisk</b>$warnReason" +
+                    "`n$($state.summary)"
+                )
+            }
+            Remove-ApproveState -ToolUseId $ToolUseId
+            exit 0
+        }
         if ($current.status -eq 'prompting') { $prompting = $true; break }
         Start-Sleep -Milliseconds 500
     }
@@ -59,7 +87,26 @@ try {
         exit 0
     }
 
-    $message = "🔔 $($state.project) — Claude просит разрешение:`n$($state.summary)"
+    # Risk line for the ask. In paranoid mode PreToolUse already scored this call
+    # - reuse that rather than paying for a second identical scoring round trip.
+    # With /score on, scoring happens HERE instead of in PreToolUse: only calls
+    # that actually reached a dialog get sent for review, and no tool call ever
+    # waits on the round trip.
+    $riskLine = ''
+    if ($null -ne $state.risk_score) {
+        $riskLine = "⚠️ Риск <b>$([int]$state.risk_score)/99</b>"
+        if ($state.risk_reason) { $riskLine += " — $(Format-HtmlEscape $state.risk_reason)" }
+        $riskLine += "`n"
+    } elseif ($state.score_all -and $state.score_detail) {
+        $scored = Get-RiskScore -Secrets $secrets -ToolName ([string]$state.tool_name) -Detail ([string]$state.score_detail)
+        if ($scored) {
+            $riskLine = "⚠️ Риск <b>$($scored.Score)/99</b>"
+            if ($scored.Reason) { $riskLine += " — $(Format-HtmlEscape $scored.Reason)" }
+            $riskLine += "`n"
+        }
+    }
+
+    $message = "🔔 $($state.project) — Claude просит разрешение:`n$riskLine$($state.summary)"
 
     $askResponse = Send-RelayJson -Uri $secrets.ask_url -Secret $secrets.relay_secret -TimeoutSec 10 -Body @{
         text    = $message

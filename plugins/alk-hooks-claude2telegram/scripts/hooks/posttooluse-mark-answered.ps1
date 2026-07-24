@@ -19,7 +19,12 @@ try {
 
     $statePath = Get-ApproveStatePath -ToolUseId $toolUseId
     if (Test-Path $statePath) {
-        Update-ApproveStateStatus -Path $statePath -Status 'answered'
+        # 'ran' is set ONLY here, and this hook fires only when the tool actually
+        # executed. The status alone can't carry that: Complete-ApproveStatesForSession
+        # also writes 'answered' when sweeping a session or retiring a superseded
+        # prompt, neither of which means anything ran. The paranoid-mode warning
+        # in watch-and-inject.ps1 depends on that distinction.
+        Update-ApproveStateStatus -Path $statePath -Status 'answered' -Fields @{ ran = $true }
     }
 } catch {
 }

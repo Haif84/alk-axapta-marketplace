@@ -316,6 +316,9 @@ function Get-EffectiveMaxLength {
 #               native dialog is actually on screen -> watcher may send the TG ask
 #   answered  - resolved locally (PostToolUse) or swept (Stop / superseded by a newer
 #               PreToolUse in the same session) -> watcher stands down, no injection
+# The 'ran' flag is set only by PostToolUse, i.e. only when the tool genuinely
+# executed. 'answered' alone is NOT that proof - the session sweeps write it too -
+# which is why the paranoid-mode warning keys off 'ran' and not off the status.
 
 $script:ApproveStateDir = Join-Path $env:TEMP 'claude-tg-approve'
 
@@ -374,14 +377,45 @@ function Get-CompactToolLabel {
     return Format-HtmlEscape $name
 }
 
-function Get-AutoApproveActive {
-    # Is auto-approve currently on for this installation's chat? Called from
-    # PreToolUse, which must return fast, so the answer is cached on disk and
-    # the relay is only asked once a minute. Fails CLOSED (returns $false) on
-    # any error - a network hiccup must never silently disable the approval
-    # gate, only ever leave it in the normal ask-the-human state.
+function ConvertTo-AutoApproveMode {
+    # Turns one cached/fresh /auto-status payload into the shape callers use.
+    # Split out so the disk-cache path and the fresh-fetch path can't drift.
+    param($Status, [int]$Now)
+
+    # Scoring-for-all (/score) is independent of the auto-approve window: it can
+    # be on while auto-approve is off, so it's read before any of the mode logic.
+    $result = [PSCustomObject]@{ Mode = 'off'; Threshold = $null; ScoreAll = [bool]$Status.score_all }
+    if (-not $Status.enabled) { return $result }
+    # Expiry is enforced locally too, so a window that lapses inside the cache
+    # lifetime stops auto-approving immediately rather than lingering up to a
+    # minute past its own deadline.
+    if ($Status.expires_at -and $Now -ge [int]$Status.expires_at) { return $result }
+
+    $mode = if ($Status.mode) { [string]$Status.mode } else { 'auto' }
+    if ($mode -eq 'paranoid') {
+        # -ne $null, not a truthiness test: threshold 0 is the strictest and most
+        # deliberate setting there is, and "if ($Status.threshold)" would read it
+        # as absent and silently widen the gate to plain auto-approve.
+        if ($null -eq $Status.threshold) { return $result }
+        $result.Threshold = [int]$Status.threshold
+    } elseif ($mode -ne 'auto') {
+        # Unknown mode from a newer relay: stand down rather than guess.
+        return $result
+    }
+    $result.Mode = $mode
+    return $result
+}
+
+function Get-AutoApproveMode {
+    # Which auto-approve mode is on for this installation's chat, and is risk
+    # scoring enabled for everything? Called from PreToolUse, which must return
+    # fast, so the answer is cached on disk and the relay is only asked once a
+    # minute. Fails CLOSED (Mode 'off') on any error - a network hiccup must
+    # never silently disable the approval gate, only ever leave it in the normal
+    # ask-the-human state.
     param([object]$Secrets)
-    if (-not $Secrets.auto_status_url) { return $false }
+    $off = [PSCustomObject]@{ Mode = 'off'; Threshold = $null; ScoreAll = $false }
+    if (-not $Secrets.auto_status_url) { return $off }
 
     # NOT Get-Date -UFormat %s here. Windows PowerShell 5.1's %s returns the
     # epoch shifted by the local UTC offset (+10800s on MSK) - a known 5.1 bug.
@@ -400,28 +434,91 @@ function Get-AutoApproveActive {
         if (Test-Path $cachePath) {
             $cached = Get-Content -LiteralPath $cachePath -Raw | ConvertFrom-Json
             if (($now - [int]$cached.cached_at) -lt 60) {
-                if (-not $cached.enabled) { return $false }
-                # Expiry is enforced locally too, so a window that lapses inside
-                # the cache lifetime stops auto-approving immediately rather
-                # than lingering up to a minute past its own deadline.
-                if ($cached.expires_at -and $now -ge [int]$cached.expires_at) { return $false }
-                return $true
+                return (ConvertTo-AutoApproveMode -Status $cached -Now $now)
             }
         }
     } catch {
     }
 
     try {
-        $uri = "$($Secrets.auto_status_url)?chat_id=$($Secrets.claude_chat_id)"
+        # features=paranoid tells the relay this hook understands the paranoid
+        # mode. Without it the relay reports a paranoid window as disabled - an
+        # older plugin reads only `enabled` and would blanket-approve every call
+        # with no scoring at all, which is worse than no auto-approve.
+        $uri = "$($Secrets.auto_status_url)?chat_id=$($Secrets.claude_chat_id)&features=paranoid"
         $response = Get-RelayJson -Uri $uri -Secret $Secrets.relay_secret -TimeoutSec 3
-        if (-not $response.ok) { return $false }
-        $enabled = [bool]$response.enabled
-        $expiresAt = if ($response.expires_at) { [int]$response.expires_at } else { 0 }
-        (@{ enabled = $enabled; expires_at = $expiresAt; cached_at = $now } | ConvertTo-Json -Compress) |
-            Set-Content -LiteralPath $cachePath -Encoding UTF8
-        return $enabled
+        if (-not $response.ok) { return $off }
+        $entry = @{
+            enabled    = [bool]$response.enabled
+            mode       = if ($response.mode) { [string]$response.mode } else { $null }
+            threshold  = if ($null -ne $response.threshold) { [int]$response.threshold } else { $null }
+            score_all  = [bool]$response.score_all
+            expires_at = if ($response.expires_at) { [int]$response.expires_at } else { 0 }
+            cached_at  = $now
+        }
+        $json = $entry | ConvertTo-Json -Compress
+        $json | Set-Content -LiteralPath $cachePath -Encoding UTF8
+        # Interpreted from the same JSON that was just cached, so this call and
+        # the next 60 seconds of cached calls can't disagree about types or nulls.
+        return (ConvertTo-AutoApproveMode -Status ($json | ConvertFrom-Json) -Now $now)
     } catch {
-        return $false
+        return $off
+    }
+}
+
+function Get-ToolScoringDetail {
+    # Plain-text description of a tool call for the risk scorer. Deliberately NOT
+    # Get-ToolSummary: that one emits Telegram HTML (<b>, <code>, entity-escaped
+    # &amp;), which would reach the model as markup noise around the command.
+    param($Hook)
+    $parts = @()
+    $toolInput = $Hook.tool_input
+    if ($toolInput.description) { $parts += [string]$toolInput.description }
+    $key = [string](Get-ToolCorrelationKey -ToolInput $toolInput)
+    if ($key) { $parts += $key }
+    $detail = ($parts -join ' | ')
+    if ($detail.Length -gt 1500) { $detail = $detail.Substring(0, 1500) }
+    return $detail
+}
+
+function Get-RiskScore {
+    # Asks the relay to score this tool call 0 (safe) .. 99 (very dangerous).
+    # Returns $null when no score is available - callers MUST treat that as
+    # "do not auto-approve", never as "safe". In paranoid mode this runs on the
+    # blocking path of every tool call, so the timeout is deliberately short.
+    # Takes plain strings rather than the hook object: watch-and-inject.ps1 also
+    # scores, and it only ever has the state file, never the original hook JSON.
+    param([object]$Secrets, [string]$ToolName, [string]$Detail)
+    if (-not $Secrets.score_url -or -not $Detail) { return $null }
+    try {
+        $response = Send-RelayJson -Uri $Secrets.score_url -Secret $Secrets.relay_secret -TimeoutSec 15 -Body @{
+            chat_id   = $Secrets.claude_chat_id
+            tool_name = $ToolName
+            detail    = $Detail
+        }
+        if (-not $response.ok -or $null -eq $response.score) { return $null }
+        return [PSCustomObject]@{
+            Score  = [int]$response.score
+            Reason = if ($response.reason) { [string]$response.reason } else { '' }
+        }
+    } catch {
+        return $null
+    }
+}
+
+function Send-ProjectNotify {
+    # Fire-and-forget message into this project's Telegram topic (relay /notify
+    # already does the topic routing). Used for the paranoid-mode warning about
+    # a high-risk call that ran with no dialog at all.
+    param([object]$Secrets, [string]$Project, [string]$Text)
+    if (-not $Secrets.relay_url -or -not $Text) { return }
+    try {
+        Send-RelayJson -Uri $Secrets.relay_url -Secret $Secrets.relay_secret -TimeoutSec 10 -Body @{
+            text    = $Text
+            chat_id = $Secrets.claude_chat_id
+            project = $Project
+        } | Out-Null
+    } catch {
     }
 }
 
@@ -430,13 +527,14 @@ function Send-AutoDigestItem {
     # project (relay owns the message_id and does the send-or-edit). Called
     # from the detached watcher, never from PreToolUse itself, so the HTTP
     # round-trip never delays the tool call.
-    param([object]$Secrets, [string]$Project, [string]$Item)
+    param([object]$Secrets, [string]$Project, [string]$Item, [object]$Score = $null)
     if (-not $Secrets.auto_digest_url -or -not $Item) { return }
     try {
         Send-RelayJson -Uri $Secrets.auto_digest_url -Secret $Secrets.relay_secret -TimeoutSec 10 -Body @{
             chat_id = $Secrets.claude_chat_id
             project = $Project
             item    = $Item
+            score   = $Score
         } | Out-Null
     } catch {
     }
@@ -473,7 +571,8 @@ function Update-ApproveStateStatus {
     # In-place status transition on an existing state file. Never downgrades
     # 'answered' back to 'prompting'/'pending' - once a prompt is resolved the
     # watcher must not be re-armed by a late PermissionRequest event.
-    param([string]$Path, [string]$Status)
+    # -Fields sets extra keys alongside the status (see posttooluse's 'ran').
+    param([string]$Path, [string]$Status, [hashtable]$Fields)
     try {
         $state = Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json
     } catch {
@@ -482,6 +581,11 @@ function Update-ApproveStateStatus {
     if (-not $state) { return }
     if ($state.status -eq 'answered' -and $Status -ne 'answered') { return }
     $state.status = $Status
+    if ($Fields) {
+        foreach ($key in $Fields.Keys) {
+            $state | Add-Member -NotePropertyName $key -NotePropertyValue $Fields[$key] -Force
+        }
+    }
     ($state | ConvertTo-Json -Compress) | Set-Content -LiteralPath $Path -Encoding UTF8
 }
 
