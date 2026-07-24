@@ -428,7 +428,13 @@ function Get-AutoApproveMode {
     if (-not (Test-Path $script:ApproveStateDir)) {
         New-Item -ItemType Directory -Force -Path $script:ApproveStateDir | Out-Null
     }
-    $cachePath = Join-Path $script:ApproveStateDir 'auto-status.json'
+    # Deliberately NOT the 'auto-status.json' that plugin <=1.2.1 uses. Both
+    # versions can be present on one machine (mid-upgrade, or a downgrade), and
+    # they share $TEMP. An old hook reading this file would see `enabled: true`
+    # for a PARANOID window and blanket-approve everything without scoring -
+    # defeating the features=paranoid gate through the cache instead of the API.
+    # A separate filename makes that impossible rather than merely unlikely.
+    $cachePath = Join-Path $script:ApproveStateDir 'auto-status-v2.json'
 
     try {
         if (Test-Path $cachePath) {
