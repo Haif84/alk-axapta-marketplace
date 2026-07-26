@@ -1,5 +1,5 @@
 ﻿# PreToolUse hook (registered with matcher
-# "Bash|PowerShell|Write|Edit|MultiEdit|NotebookEdit|WebFetch"): writes a 'pending'
+# "Bash|PowerShell|Write|Edit|MultiEdit|NotebookEdit|WebFetch|Read|Glob|Grep"): writes a 'pending'
 # state file and spawns a detached watcher (watch-and-inject.ps1), then emits
 # NOTHING - the normal permission flow decides whether a dialog is needed, so
 # the settings.json allowlist keeps working. If a dialog does appear,
@@ -132,7 +132,7 @@ try {
 
     # Cost / trade-off worth knowing: this spawns a hidden watcher process on
     # EVERY matched tool call (Bash|PowerShell|Write|Edit|MultiEdit|NotebookEdit|
-    # WebFetch). For allowlisted / auto-approved calls no PermissionRequest ever
+    # WebFetch|Read|Glob|Grep). For allowlisted / auto-approved calls no PermissionRequest ever
     # fires, so the watcher sends nothing to Telegram - it just waits up to
     # promptWaitBudgetSec (15s, defined in watch-and-inject.ps1) and exits. On a
     # busy session that's a steady stream of short-lived background processes.
