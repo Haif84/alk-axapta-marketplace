@@ -23,7 +23,7 @@ try {
     # hook JSON has no tool_use_id (confirmed empirically), so match on
     # tool_name+correlation key instead. Keep the list in sync with the
     # PreToolUse/PostToolUse matcher in hooks/hooks.json.
-    $interactiveToolNames = @('Bash', 'PowerShell', 'Write', 'Edit', 'MultiEdit', 'NotebookEdit', 'WebFetch')
+    $interactiveToolNames = @('Bash', 'PowerShell', 'Write', 'Edit', 'MultiEdit', 'NotebookEdit', 'WebFetch', 'Read', 'Glob', 'Grep')
     if ($eventName -eq 'PermissionRequest' -and $interactiveToolNames -contains $hook.tool_name) {
         $corrKey = Get-ToolCorrelationKey -ToolInput $hook.tool_input
         # PreToolUse and PermissionRequest can fire close enough together that
