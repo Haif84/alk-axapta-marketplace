@@ -766,9 +766,11 @@ function Remove-StaleCallLogs {
     # Rotation: one file per day, keep today + ($KeepDays - 1) previous days.
     # Same age-sweep shape as Remove-StaleApproveStates, plus a stamp file so
     # the Get-ChildItem runs at most once every $ThrottleHours per machine.
-    # Called ONLY from the detached watcher - never from PreToolUse, which sits
-    # on the blocking path of every single tool call and already walks the
-    # approve-state directory twice.
+    # Called ONLY from PostToolUse, by which point the tool has already run.
+    # Not from PreToolUse: that one sits on the blocking path of every single
+    # tool call and already walks the approve-state directory twice. Not from
+    # the watcher either: it isn't spawned at all when the relay endpoints it
+    # needs are missing, so rotation would silently stop happening.
     param([object]$Secrets = $null, [int]$KeepDays = 2, [int]$ThrottleHours = 6)
     try {
         $dir = Get-CallLogDir -Secrets $Secrets
