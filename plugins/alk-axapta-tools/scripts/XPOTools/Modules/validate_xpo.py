@@ -468,6 +468,11 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Валидатор xpo-файлов")
     parser.add_argument("target", help="Файл или директория")
     parser.add_argument("--strict", action="store_true", help="WARN'ы тоже считать ошибками (exit != 0)")
+    parser.add_argument(
+        "--project-code", default="", metavar="CODE",
+        help="Код проекта для проверки мод-маркеров; перекрывает AX_PROJECT_ID. "
+             "Нужен репозиториям, чей код проекта отличается от глобальной ENV — "
+             "например --project-code CIT000 при AX_PROJECT_ID=ALK_DEVAX12")
     args = parser.parse_args()
 
     target = pathlib.Path(args.target).resolve()
@@ -476,7 +481,10 @@ def main() -> int:
         print(f"ERROR: нет .xpo файлов в {target}", file=sys.stderr)
         return 2
 
-    prefix = cfg.get("AX_PROJECT_ID", "") or ""
+    # Явный --project-code важнее глобальной ENV: один репозиторий может вести
+    # модификацию под чужим кодом проекта (например CIT000 в общем тулинге),
+    # и тогда AX_PROJECT_ID из ENV дал бы ложные WARN на каждом файле.
+    prefix = args.project_code or (cfg.get("AX_PROJECT_ID", "") or "")
     if "<" in prefix:
         prefix = ""
 
