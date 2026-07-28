@@ -1,4 +1,4 @@
-# UserPromptSubmit hook: on every new user prompt, checks the relay's inbox
+﻿# UserPromptSubmit hook: on every new user prompt, checks the relay's inbox
 # for this project (free-text messages typed into the project's Telegram
 # topic - see relay's GET /inbox/{project}) and surfaces any as
 # additionalContext. This is the only realistic delivery point: Claude Code

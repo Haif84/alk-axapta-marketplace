@@ -4,7 +4,7 @@
     "name": "ALK Development Team"
   },
   "description": "Магазин скиллов: инструменты для работы с проектами Microsoft Dynamics AX 2012 (ALK).",
-  "version": "1.9.2",
+  "version": "1.9.3",
   "plugins": [
     {
       "name": "alk-axapta-tools",
@@ -36,8 +36,8 @@
     {
       "name": "alk-hooks-claude2telegram",
       "source": "./plugins/alk-hooks-claude2telegram",
-      "description": "Hooks: разрешения и уведомления Claude Code через Telegram-бота (Allow/Deny с телефона, /wait, /length, /auto — авто-подтверждение на время, в том числе параноидальное с LLM-оценкой риска и порогом, /score — оценка риска для всех запросов, /default_scores — шкала, алиасы машин, темы по проектам, обратная связь из Telegram). Активируется сам при установке (hooks/hooks.json).",
-      "version": "1.4.0",
+      "description": "Hooks: разрешения и уведомления Claude Code через Telegram-бота (Allow/Deny с телефона, /wait, /length, /auto — авто-подтверждение на время, в том числе параноидальное с LLM-оценкой риска и порогом, /score — оценка риска для всех запросов, /default_scores — шкала, алиасы машин, темы по проектам, обратная связь из Telegram). Покрывает все инструменты, включая MCP. Локальный JSONL-лог вызовов и итогов с ротацией. Активируется сам при установке (hooks/hooks.json).",
+      "version": "1.5.0",
       "author": {
         "name": "ALK Development Team"
       }

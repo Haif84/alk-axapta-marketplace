@@ -15,16 +15,37 @@ try {
     $hook = $stdin | ConvertFrom-Json
     $eventName = $hook.hook_event_name
 
-    # These tool types are handled interactively by the approve flow. When
-    # PermissionRequest fires for one of them, the native dialog is provably on
-    # screen - flip the matching state to 'prompting' so the watcher knows it may
-    # send the Telegram ask (it stays silent otherwise, e.g. for allowlisted calls
-    # that never prompt), and skip the redundant plain FYI. PermissionRequest's
-    # hook JSON has no tool_use_id (confirmed empirically), so match on
-    # tool_name+correlation key instead. Keep the list in sync with the
-    # PreToolUse/PostToolUse matcher in hooks/hooks.json.
-    $interactiveToolNames = @('Bash', 'PowerShell', 'Write', 'Edit', 'MultiEdit', 'NotebookEdit', 'WebFetch', 'Read', 'Glob', 'Grep')
-    if ($eventName -eq 'PermissionRequest' -and $interactiveToolNames -contains $hook.tool_name) {
+    # Loaded up here (it used to be read below, after the branches) so the call
+    # log and Get-MachineLabel are available to every branch. Null-safe on
+    # purpose: a missing or unparseable secrets file must still let the
+    # 'prompting' flip happen - that flip is local file work and needs no relay.
+    $secrets = $null
+    $secretsPath = Get-TgApproveSecretsPath
+    if ($secretsPath) {
+        try {
+            $secrets = Get-Content -LiteralPath $secretsPath -Raw | ConvertFrom-Json
+        } catch {
+        }
+    }
+
+    $projectCtx = Get-ProjectContext -Hook $hook -Secrets $secrets
+    $project = $projectCtx.Display
+
+    # ANY PermissionRequest means the native dialog is provably on screen. If the
+    # approve flow armed a watcher for this call, flip its state to 'prompting' so
+    # the watcher knows it may send the Telegram ask (it stays silent otherwise,
+    # e.g. for allowlisted calls that never prompt), and skip the redundant plain
+    # FYI. PermissionRequest's hook JSON has no tool_use_id (confirmed
+    # empirically), so match on tool_name+correlation key instead.
+    #
+    # There used to be a hardcoded $interactiveToolNames whitelist here that had
+    # to be kept in sync with the hooks.json matcher by hand. It is gone on
+    # purpose: the matcher is now "*", so mcp__* calls arm watchers too, and under
+    # the whitelist they fell through to a useless FYI while their watcher sat out
+    # phase 1 and died - i.e. no Allow/Deny buttons on the phone for any MCP call
+    # at all. The existence of a state file is now the whole gate, and that cannot
+    # drift out of sync with the matcher.
+    if ($eventName -eq 'PermissionRequest') {
         $corrKey = Get-ToolCorrelationKey -ToolInput $hook.tool_input
         # PreToolUse and PermissionRequest can fire close enough together that
         # pretooluse-approve.ps1 hasn't written its state file yet (it does more
@@ -38,6 +59,16 @@ try {
         }
         if ($statePath) {
             Update-ApproveStateStatus -Path $statePath -Status 'prompting'
+            Write-CallLog -Secrets $secrets -Fields @{
+                ev   = 'perm'
+                res  = 'dialog_shown'
+                tool = [string]$hook.tool_name
+                tuid = [System.IO.Path]::GetFileNameWithoutExtension($statePath)
+                sid  = [string]$hook.session_id
+                proj = $projectCtx.Raw
+                mach = (Get-MachineLabel -Secrets $secrets)
+                det  = (Get-ToolLogDetail -Hook $hook)
+            }
             exit 0
         }
     }
@@ -49,12 +80,7 @@ try {
         Complete-ApproveStatesForSession -SessionId $hook.session_id
     }
 
-    $secretsPath = Get-TgApproveSecretsPath
-    if (-not $secretsPath) { exit 0 }
-    $secrets = Get-Content -LiteralPath $secretsPath -Raw | ConvertFrom-Json
-
-    $projectCtx = Get-ProjectContext -Hook $hook -Secrets $secrets
-    $project = $projectCtx.Display
+    if (-not $secrets -or -not $secrets.relay_url) { exit 0 }
 
     $toolSummary = Get-ToolSummary -Hook $hook
 
@@ -80,6 +106,22 @@ try {
         chat_id = $secrets.claude_chat_id
         project = $projectCtx.Raw
     } | Out-Null
+
+    # A PermissionRequest reaching this far means no state file was found for it,
+    # so no watcher is racing the dialog and the phone gets a plain FYI with no
+    # buttons. Worth recording: it is the signature of an approve-flow miss.
+    $notifyNote = $null
+    if ($eventName -eq 'PermissionRequest') { $notifyNote = 'no state file - watcher not armed' }
+    Write-CallLog -Secrets $secrets -Fields @{
+        ev   = 'notify'
+        res  = [string]$eventName
+        tool = [string]$hook.tool_name
+        sid  = [string]$hook.session_id
+        proj = $projectCtx.Raw
+        mach = (Get-MachineLabel -Secrets $secrets)
+        det  = (Get-ToolLogDetail -Hook $hook)
+        note = $notifyNote
+    }
 } catch {
     # Never let a Telegram/relay failure affect the Claude Code session.
 }
