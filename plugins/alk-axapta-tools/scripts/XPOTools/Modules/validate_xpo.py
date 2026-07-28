@@ -148,6 +148,36 @@ def check_mojibake(path: pathlib.Path, text: str) -> List[Issue]:
     return []
 
 
+def check_indices_shape(path: pathlib.Path, text: str) -> List[Issue]:
+    """Блок INDICES в таблице НЕ использует обёртки INDEX/ENDINDEX — в отличие от
+    GROUPS, где GROUP/ENDGROUP как раз нужны. Формат:
+
+        INDICES
+          #ИмяИндекса
+          PROPERTIES
+            ...
+          ENDPROPERTIES
+          INDEXFIELDS
+            #Поле
+          ENDINDEXFIELDS
+        ENDINDICES
+
+    Написание `INDEX #Имя` валит импорт в AX: парсер принимает слово INDEX за имя
+    индекса и падает на следующей строке («ожидалось PROPERTIES, но обнаружено
+    #Имя»). Балансировка блоков такого не ловит, поэтому проверяем отдельно.
+    """
+    issues: List[Issue] = []
+    for lineno, line in enumerate(text.splitlines(), 1):
+        stripped = line.strip()
+        if re.match(r"^(INDEX|ENDINDEX)\b", stripped):
+            issues.append(Issue(
+                str(path), "ERROR",
+                f"line {lineno}: {stripped.split()[0]} внутри INDICES — обёрток "
+                f"INDEX/ENDINDEX в формате xpo нет, AX не импортирует. "
+                f"Формат: INDICES -> #ИмяИндекса -> PROPERTIES"))
+    return issues
+
+
 def check_markers(path: pathlib.Path, text: str, prefix: str) -> List[Issue]:
     if not prefix:
         return []
@@ -453,6 +483,7 @@ def validate_one(
     text = raw.decode("utf-8", errors="replace")
     issues.extend(check_balance(path, text))
     issues.extend(check_mojibake(path, text))
+    issues.extend(check_indices_shape(path, text))
     issues.extend(check_markers(path, text, prefix))
     issues.extend(check_source_block_wrapping(path, text, prefix))
     issues.extend(check_reserved_identifiers(path, text))
