@@ -178,6 +178,23 @@ def check_indices_shape(path: pathlib.Path, text: str) -> List[Issue]:
     return issues
 
 
+#: Предел длины имени AOT-объекта в AX 2012 — EDT SysUtilElementName это STRING(40).
+MAX_OBJECT_NAME_LEN = 40
+
+
+def check_object_name_length(path: pathlib.Path, name: str) -> List[Issue]:
+    """Имя AOT-объекта длиннее 40 символов AX не примет. Сокращать надо ЗАРАНЕЕ и
+    осмысленно — ужимать самые длинные слова, сохраняя смысл
+    (`CIT_DevToolPanel_Display_SysMCPParameters_CDT` -> `..._SysMCPParms_CDT`),
+    а не полагаться на то, что кто-то обрежет имя за тебя."""
+    if not name or len(name) <= MAX_OBJECT_NAME_LEN:
+        return []
+    return [Issue(
+        str(path), "ERROR",
+        f"имя объекта {name!r} — {len(name)} символов, предел {MAX_OBJECT_NAME_LEN}. "
+        f"Сократи самые длинные слова с сохранением смысла")]
+
+
 def check_markers(path: pathlib.Path, text: str, prefix: str) -> List[Issue]:
     if not prefix:
         return []
@@ -488,6 +505,7 @@ def validate_one(
     issues.extend(check_source_block_wrapping(path, text, prefix))
     issues.extend(check_reserved_identifiers(path, text))
     obj = detect_object(path, text)
+    issues.extend(check_object_name_length(path, obj[1]))
     if root is not None and obj[0]:
         issues.extend(check_layout_consistency(path, root, obj[0], text))
     return issues, obj
