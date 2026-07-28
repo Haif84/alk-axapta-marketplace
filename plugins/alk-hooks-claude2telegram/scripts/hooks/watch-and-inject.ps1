@@ -26,6 +26,37 @@ try {
     $state = Read-ApproveState -ToolUseId $ToolUseId
     if (-not $state) { exit 0 }
 
+    # This process is where nearly every OUTCOME becomes known - who decided, and
+    # whether the decision actually landed - so every exit path below logs one
+    # line. Fields shared by all of them:
+    $log = @{
+        tuid = [string]$ToolUseId
+        sid  = [string]$state.session_id
+        tool = [string]$state.tool_name
+        proj = [string]$state.raw_project
+        det  = (Format-LogText -Text ([string]$state.corr_key) -MaxLength 300)
+    }
+    function Add-WatchLog {
+        # Reads $state, $secrets and $log from the enclosing try block - same
+        # trick as Edit-AskMessage further down.
+        param([string]$Res, [string]$Who, [string]$Req, [string]$Note)
+        $ms = $null
+        if ($state.created_ms) {
+            $ms = [int]([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds() - [long]$state.created_ms)
+        }
+        $score = $null
+        if ($null -ne $state.risk_score) { $score = [int]$state.risk_score }
+        Write-CallLog -Secrets $secrets -Fields ($log + @{
+            ev    = 'watch'
+            res   = $Res
+            who   = (Format-LogText -Text $Who -MaxLength 60)
+            req   = $Req
+            note  = $Note
+            ms    = $ms
+            score = $score
+        })
+    }
+
     # Auto-approve path: pretooluse-approve.ps1 already answered the permission
     # question with "allow", so there is no dialog to race, no PermissionRequest
     # coming, and nothing to inject. The only thing left is adding this call to
@@ -75,6 +106,7 @@ try {
                     "`nОценка риска: <b>$warnRisk</b>$warnReason" +
                     "`n$($state.summary)"
                 )
+                Add-WatchLog -Res 'paranoid_ran_no_dialog' -Note 'allowlisted, ran with no dialog'
             }
             Remove-ApproveState -ToolUseId $ToolUseId
             exit 0
@@ -83,6 +115,11 @@ try {
         Start-Sleep -Milliseconds 500
     }
     if (-not $prompting) {
+        # No dialog ever appeared: the allowlist passed this call silently, or
+        # PermissionRequest doesn't fire in this environment. The share of these
+        # lines against res=ask_sent is exactly how wasteful arming a watcher on
+        # every tool call is - measure before optimising it.
+        Add-WatchLog -Res 'no_dialog'
         Remove-ApproveState -ToolUseId $ToolUseId
         exit 0
     }
@@ -114,6 +151,7 @@ try {
         project = $state.raw_project
     }
     if (-not $askResponse.ok -or -not $askResponse.request_id) {
+        Add-WatchLog -Res 'ask_failed'
         Remove-ApproveState -ToolUseId $ToolUseId
         exit 0
     }
@@ -121,6 +159,7 @@ try {
     $requestId = $askResponse.request_id
     $answerUrl = "$($secrets.answer_url_base)/$requestId"
     $pollBudgetSec = Get-EffectiveWaitBudget -Secrets $secrets
+    Add-WatchLog -Res 'ask_sent' -Req ([string]$requestId)
 
     # Strips the inline buttons off our ask message and explains why. Relay-side,
     # /edit also drops the matching pending ask so the expiry sweep won't
@@ -147,6 +186,7 @@ try {
         if (-not $current -or $current.status -eq 'answered') {
             # Resolved locally (or state vanished) - stand down, no injection.
             Edit-AskMessage -Suffix '🖥 Решено локально в IDE'
+            Add-WatchLog -Res 'resolved_local' -Who 'local' -Req ([string]$requestId)
             Remove-ApproveState -ToolUseId $ToolUseId
             exit 0
         }
@@ -164,11 +204,14 @@ try {
             $current = Read-ApproveState -ToolUseId $ToolUseId
             if (-not $current -or $current.status -eq 'answered') {
                 Edit-AskMessage -Suffix "🖥 Решено локально в IDE (ответ с телефона от $(Format-HtmlEscape $answer.answered_by) не применён)"
+                Add-WatchLog -Res 'phone_late' -Who ("phone:" + [string]$answer.answered_by) -Req ([string]$requestId)
                 Remove-ApproveState -ToolUseId $ToolUseId
                 exit 0
             }
 
             Invoke-VSCodeKeystroke -Decision $answer.decision | Out-Null
+            Add-WatchLog -Res ('phone_' + [string]$answer.decision) `
+                -Who ("phone:" + [string]$answer.answered_by) -Req ([string]$requestId)
 
             # Verify the injection actually landed: for "allow", PostToolUse only
             # fires once the tool truly executes, which requires the dialog to have
@@ -192,6 +235,13 @@ try {
                         break
                     }
                 }
+                # Logged outside the edit_url guard below on purpose: "allowed from
+                # the phone but never applied in the IDE" must be recorded even
+                # when the Telegram message can't be edited to say so.
+                if (-not $verified) {
+                    Add-WatchLog -Res 'inject_unverified' `
+                        -Who ("phone:" + [string]$answer.answered_by) -Req ([string]$requestId)
+                }
                 if (-not $verified -and $secrets.edit_url -and $answer.chat_id -and $answer.message_id) {
                     $warnText = "$($answer.text)`n`n⚠️ Разрешено, не удалось применить в IDE — проверьте вручную — $(Format-HtmlEscape $answer.answered_by)"
                     try {
@@ -211,6 +261,7 @@ try {
     }
 
     # Poll budget exhausted - the relay's own expiry sweep edits the message.
+    Add-WatchLog -Res 'timeout' -Req ([string]$requestId)
     Remove-ApproveState -ToolUseId $ToolUseId
 } catch {
 }

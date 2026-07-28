@@ -481,7 +481,16 @@ function Get-ToolScoringDetail {
     $toolInput = $Hook.tool_input
     if ($toolInput.description) { $parts += [string]$toolInput.description }
     $key = [string](Get-ToolCorrelationKey -ToolInput $toolInput)
-    if ($key) { $parts += $key }
+    # '{}' is what the JSON-dump fallback produces for an empty tool_input -
+    # zero information, and worse than nothing here because a non-empty $Detail
+    # makes Get-RiskScore attempt a scoring round trip on it.
+    if ($key -and $key -ne '{}') { $parts += $key }
+    # MCP tools routinely have no description, no command and an EMPTY
+    # tool_input (mcp__..._browser_close), which left $detail empty -> Get-RiskScore
+    # returns $null -> paranoid mode fails closed and the dialog appears anyway.
+    # I.e. paranoid auto-approve could never work for them at all. The tool name
+    # alone is a legitimate thing to score, so fall back to it.
+    if ($parts.Count -eq 0 -and $Hook.tool_name) { $parts += "tool: $([string]$Hook.tool_name)" }
     $detail = ($parts -join ' | ')
     if ($detail.Length -gt 1500) { $detail = $detail.Substring(0, 1500) }
     return $detail
@@ -631,6 +640,152 @@ function Remove-StaleApproveStates {
     Get-ChildItem -Path $script:ApproveStateDir -Filter '*.json' -ErrorAction SilentlyContinue |
         Where-Object { $_.LastWriteTime -lt $cutoff } |
         Remove-Item -Force -ErrorAction SilentlyContinue
+}
+
+# --- Call log (JSONL) ---------------------------------------------------------
+# One line per event in <logdir>\calls-YYYYMMDD.jsonl. Reason it exists: the
+# approve-state files are deleted the moment a call resolves, so afterwards
+# NOTHING records which tool calls happened, how they were decided, or whether
+# they ran - and a local deny leaves no hook event at all. Deliberately NOT
+# inside $script:ApproveStateDir and never named '*.json': Remove-StaleApproveStates
+# deletes every *.json older than an hour in that folder, and both
+# Complete-ApproveStatesForSession and Find-ApproveStateFile parse every *.json
+# there on every single tool call.
+# Every function here is fail-open - logging must never delay or break a hook.
+
+$script:CallLogDirCache = $null
+$script:CallLogUtf8 = New-Object System.Text.UTF8Encoding($false)
+
+function Get-CallLogDir {
+    # Same resolution philosophy as Get-TgApproveSecretsPath: 1) env override
+    # (also how the offline test harness redirects the log), 2) opt-in
+    # call_log_dir in the secrets file, 3) this machine's folder, but only if
+    # its PARENT exists - the plugin ships to machines with no E: drive, and
+    # probing the parent keeps the path working even if _requests got deleted,
+    # 4) %TEMP% so a fresh install still logs somewhere.
+    param([object]$Secrets)
+    if ($env:TG_CALL_LOG_OFF) { return $null }
+    if ($script:CallLogDirCache) { return $script:CallLogDirCache }
+    $dir = $null
+    if ($env:TG_CALL_LOG_DIR) { $dir = [string]$env:TG_CALL_LOG_DIR }
+    elseif ($Secrets -and $Secrets.call_log_dir) { $dir = [string]$Secrets.call_log_dir }
+    elseif (Test-Path 'E:\ZeroCoder_local') { $dir = 'E:\ZeroCoder_local\_requests' }
+    else { $dir = Join-Path $env:TEMP 'claude-tg-calls' }
+    try {
+        if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
+    } catch {
+        return $null
+    }
+    $script:CallLogDirCache = $dir
+    return $dir
+}
+
+function Format-LogText {
+    # Plain single-line truncated text for a log field. NOT Format-TextPreview:
+    # that one HTML-escapes for Telegram, which would leave &amp;/&lt; noise in
+    # a file meant to be read and grepped.
+    param([string]$Text, [int]$MaxLength = 200)
+    if (-not $Text) { return '' }
+    $t = ($Text -replace '\s+', ' ').Trim()
+    if ($t.Length -gt $MaxLength) { $t = $t.Substring(0, $MaxLength) + '...' }
+    return $t
+}
+
+function Get-ToolLogDetail {
+    # Same source fields as Get-ToolScoringDetail (description + correlation
+    # key) but plain text and capped at 300 - Get-ToolSummary's own generic cap -
+    # instead of the scorer's 1500. Deliberately NOT Get-ToolSummary's output:
+    # that is Telegram HTML, and ConvertTo-Json escapes < > & into \u003c etc,
+    # so the log would fill up with markup noise.
+    param($Hook)
+    $parts = @()
+    if ($Hook.tool_input -and $Hook.tool_input.description) {
+        $parts += (Format-LogText -Text ([string]$Hook.tool_input.description) -MaxLength 150)
+    }
+    $key = [string](Get-ToolCorrelationKey -ToolInput $Hook.tool_input)
+    if ($key) { $parts += (Format-LogText -Text $key -MaxLength 200) }
+    return (Format-LogText -Text ($parts -join ' | ') -MaxLength 300)
+}
+
+function Write-CallLog {
+    # Appends one compact JSON object as a line.
+    #
+    # Concurrency: PreToolUse, PostToolUse, PermissionRequest and one DETACHED
+    # WATCHER PER TOOL CALL all append to the same file from separate processes,
+    # and with matcher "*" that is every tool call in every session. No mutex:
+    # File::AppendAllText opens with FileShare.Read, so a collision throws
+    # IOException instead of interleaving bytes - the file can never be
+    # corrupted, the loser only has to retry. A named Mutex would add a handle
+    # per hook process plus AbandonedMutexException handling (watchers get
+    # killed together with the IDE) and buy nothing. Each append is <1 KB and
+    # takes well under a millisecond, so contention is rare; worst case here is
+    # ~75 ms and after 5 attempts the line is DROPPED SILENTLY - PreToolUse is
+    # on the blocking path of every tool call, and a missing log line is
+    # strictly better than a delayed tool.
+    #
+    # Explicit UTF8Encoding($false): same reason as Write-HookOutput - PS 5.1
+    # re-encodes via the system codepage otherwise and Cyrillic turns to mush.
+    param([hashtable]$Fields, [object]$Secrets = $null)
+    try {
+        $dir = Get-CallLogDir -Secrets $Secrets
+        if (-not $dir) { return }
+        $now = [DateTimeOffset]::Now
+        # Local offset, not Z: this log exists to answer "what happened at 14:30".
+        # Get-Date -UFormat %s is never used here - see the PS 5.1 bug note in
+        # Get-AutoApproveMode.
+        $entry = [ordered]@{ v = 1; ts = $now.ToString('yyyy-MM-ddTHH:mm:ss.fffzzz') }
+        # Fixed key list, so every line has the same field order no matter how
+        # the caller's hashtable enumerates (PS 5.1 hashtables are unordered).
+        foreach ($k in @('ev', 'res', 'tool', 'tuid', 'sid', 'proj', 'mach', 'det', 'who', 'via', 'mode', 'thr', 'score', 'why', 'req', 'ms', 'note')) {
+            if (-not $Fields.ContainsKey($k)) { continue }
+            $val = $Fields[$k]
+            # Explicit $null / empty-string checks, NOT a truthiness test:
+            # score 0 and thr 0 are real, meaningful values (threshold 0 is the
+            # strictest paranoid setting there is).
+            if ($null -eq $val) { continue }
+            if ($val -is [string] -and $val.Length -eq 0) { continue }
+            $entry[$k] = $val
+        }
+        $entry['pid'] = $PID
+        $line = ($entry | ConvertTo-Json -Compress -Depth 3) + "`r`n"
+        $path = Join-Path $dir ('calls-' + $now.ToString('yyyyMMdd') + '.jsonl')
+        for ($i = 0; $i -lt 5; $i++) {
+            try {
+                [System.IO.File]::AppendAllText($path, $line, $script:CallLogUtf8)
+                return
+            } catch [System.IO.IOException] {
+                # Jittered backoff so N processes don't retry in lockstep.
+                Start-Sleep -Milliseconds (5 + (Get-Random -Maximum 15))
+            }
+        }
+    } catch {
+    }
+}
+
+function Remove-StaleCallLogs {
+    # Rotation: one file per day, keep today + ($KeepDays - 1) previous days.
+    # Same age-sweep shape as Remove-StaleApproveStates, plus a stamp file so
+    # the Get-ChildItem runs at most once every $ThrottleHours per machine.
+    # Called ONLY from the detached watcher - never from PreToolUse, which sits
+    # on the blocking path of every single tool call and already walks the
+    # approve-state directory twice.
+    param([object]$Secrets = $null, [int]$KeepDays = 2, [int]$ThrottleHours = 6)
+    try {
+        $dir = Get-CallLogDir -Secrets $Secrets
+        if (-not $dir) { return }
+        # Not named '*.jsonl' - the stamp has to survive its own sweep.
+        $stamp = Join-Path $dir '.rotate-stamp'
+        if (Test-Path $stamp) {
+            if ((Get-Item -LiteralPath $stamp).LastWriteTime -gt (Get-Date).AddHours(-$ThrottleHours)) { return }
+        }
+        # Stamped BEFORE sweeping, so two watchers racing here don't both scan.
+        [System.IO.File]::WriteAllText($stamp, [DateTimeOffset]::Now.ToString('o'), $script:CallLogUtf8)
+        $cutoff = (Get-Date).Date.AddDays(-($KeepDays - 1))
+        Get-ChildItem -Path $dir -Filter 'calls-*.jsonl' -ErrorAction SilentlyContinue |
+            Where-Object { $_.LastWriteTime -lt $cutoff } |
+            Remove-Item -Force -ErrorAction SilentlyContinue
+    } catch {
+    }
 }
 
 function Invoke-VSCodeKeystroke {

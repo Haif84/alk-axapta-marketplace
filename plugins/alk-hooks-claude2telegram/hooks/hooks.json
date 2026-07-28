@@ -22,7 +22,7 @@
     ],
     "PreToolUse": [
       {
-        "matcher": "Bash|PowerShell|Write|Edit|MultiEdit|NotebookEdit|WebFetch|Read|Glob|Grep",
+        "matcher": "*",
         "hooks": [
           {
             "type": "command",
@@ -33,7 +33,7 @@
     ],
     "PostToolUse": [
       {
-        "matcher": "Bash|PowerShell|Write|Edit|MultiEdit|NotebookEdit|WebFetch|Read|Glob|Grep",
+        "matcher": "*",
         "hooks": [
           {
             "type": "command",
