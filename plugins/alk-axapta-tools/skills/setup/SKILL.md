@@ -39,9 +39,13 @@ ENV настраивается один раз на машину, но отде�
   "AX_USER_NICK": "akaz",
   "AX_AOT_PATH": "E:\\ZeroCoder_local\\_dax\\_sources\\ERP\\AOT",
   "AX_OBJECT_PREFIX": "",
-  "AX_OBJECT_SUFFIX": "_CDT"
+  "AX_OBJECT_SUFFIX": "_cdt"
 }
 ```
+
+Аффикс в настройке — всегда в **мемберной** (нижней) форме (`_cdt`, `alk_`); UPPER-форму
+для имён AOT-объектов (`_CDT`, `ALK_`) скилл `axapta-mod-comments` выводит из неё сам
+(см. там §«Деривация аффикса»).
 
 Итоговый приоритет: **`.axapta.json` → ENV → `config.local.json` → `config.example.json`**.
 
