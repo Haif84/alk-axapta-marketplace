@@ -9,8 +9,11 @@ Microsoft Dynamics AX 2012 (X++).
 |---------|------------|
 | `build-shared-project` | Собирает финальный `SharedProject_*.xpo` (AOT Project + тела всех его объектов) из папки `XPO/*.xpo`. |
 | `build-resource-xpo` | Собирает AOT `Resource` `.xpo` из бинарника (xlsx и др.) с корректным BINARY-wrapper (`FF FF FF`). |
-| `validate-xpo` | Проверяет xpo-файлы: BOM+CRLF, балансировка блоков, mojibake, наличие маркеров модификаций, уникальность имён объектов. |
+| `validate-xpo` | Проверяет xpo-файлы: BOM+CRLF, балансировка блоков, mojibake, наличие маркеров модификаций, уникальность имён объектов, формат блока `INDICES` (без обёрток `INDEX`/`ENDINDEX`), предел длины имени объекта (40). Флаг `--project-code` перекрывает `AX_PROJECT_ID` для проверки маркеров. |
 | `split-shared-project` | Обратная операция к `build-shared-project`: нарезает бандл обратно на отдельные `<Type>_<Name>.xpo`. |
+| `organize-xpo` | Раскладывает плоские `xpo/*.xpo` по AOT-структуре (`Classes/`, `Data Dictionary/Tables/`, …) и обратно (flatten). |
+| `sync-xpo` | Сверяет состав задачи с боевой выгрузкой AOT-Prod. |
+| `cleanup-xpo` | Чистит пустые подпапки и старые сборки в `_release/`. |
 | `fix-mojibake` | Чинит файлы с двойной перекодировкой CP1251↔UTF-8. |
 
 Внутренние модули — в [Modules/](Modules/), обёртки командной строки — в [bin/](bin/).
@@ -51,10 +54,15 @@ cd "$env:USERPROFILE\.claude\scripts\XPOTools"
 
 Источники значений по убыванию приоритета:
 
-1. Переменные окружения `AX_PROJECT_ID`, `AX_USER_NICK`, `AX_AOT_PATH`, `AX_OBJECT_PREFIX`,
+1. `.axapta.json` в папке проекта (ищется вверх от текущей директории) — перекрывает
+   всё остальное; нужен репозиториям, чья модификация ведётся не под глобальным кодом
+   проекта. Задаёт только перекрываемые ключи; пустая строка значима
+   (`"AX_OBJECT_PREFIX": ""` гасит унаследованный из ENV префикс). Аффикс — в мемберной
+   форме (`"_cdt"`, `"alk_"`). См. скилл `setup` §«Конфиг уровня проекта».
+2. Переменные окружения `AX_PROJECT_ID`, `AX_USER_NICK`, `AX_AOT_PATH`, `AX_OBJECT_PREFIX`,
    `AX_OBJECT_SUFFIX`.
-2. `config.local.json` (gitignored).
-3. `config.example.json` (под git, плейсхолدеры).
+3. `config.local.json` (gitignored).
+4. `config.example.json` (под git, плейсхолдеры).
 
 Все пять ключей обязательны (`AX_OBJECT_PREFIX`/`AX_OBJECT_SUFFIX` — ровно один из двух);
 `Modules/config.py` вызванный напрямую (`python Modules/config.py`) проверяет это и
@@ -78,6 +86,8 @@ build-shared-project --root .\XPO --project-name ALK_DEVAX12_DAX_012345_akaz --y
 
 # Валидация
 validate-xpo .\XPO --strict
+# ...с кодом проекта, отличным от глобальной ENV (см. --project-code)
+validate-xpo .\XPO --strict --project-code CIT000
 
 # Разбор бандла обратно
 split-shared-project .\XPO\_release\SharedProject_*.xpo --out .\XPO

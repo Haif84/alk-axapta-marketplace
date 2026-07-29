@@ -22,8 +22,8 @@ Microsoft Dynamics AX 2012 (ALK). Один репозиторий обслужи
 
 | Скилл | Назначение |
 | ----- | ---------- |
-| `setup` | Разовая настройка ENV (ник, AOT-Prod, префикс) |
-| `axapta-mod-comments` | Маркеры модификаций ALK; на объекте текущей мод — только `classDeclaration`, без header/`+/-` на методах |
+| `setup` | Разовая настройка ENV (ник, AOT-Prod, аффикс); per-проектный оверрайд — `.axapta.json` |
+| `axapta-mod-comments` | Маркеры модификаций ALK + конвенции X++ (отступ маркеров, хвостовой маркер для одной строки, `_changeDeclaration` у таблиц/форм, camelCase/аббревиатуры, предел имени 40) |
 | `axapta-project-export` | Сборка финального `.xpo`-бандла |
 | `axapta-project-manage` | Organize/flatten/sync/cleanup папки `XPO/` |
 | `axapta-xpo-helper` | Resource BINARY (xlsx→xpo) + конвенции `XMLExcelReport_RU` |
