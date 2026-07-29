@@ -94,7 +94,101 @@ python -m unittest "$pluginRoot\scripts\XPOTools\tests\test_resource_wrapper.py"
 
 NET = COM Interop + `.xlt`, column AutoFit тоже не встроен. Для табличных HR-отчётов предпочтителен `XMLExcelReport_RU` + Resource xlsx.
 
-## 3. Backlog v2+ (не делать молча в v1)
+## 3. Каркасы объектов, которые пишутся руками
+
+### Правило образца (главное)
+
+Структуру xpo брать **из боевой выгрузки AX 2012** — `%AX_AOT_PATH%\<Тип>\`.
+Не из `BM.xpo` (это экспорт **AX 3.0**: там нет `REFERENCEDATASOURCES`,
+`PARTREFERENCES` и части свойств) и не по аналогии с соседним объектом **другого
+вида** — у формы с источником данных и без него разный `OBJECTBANK`, у таблицы
+`INDICES` устроен не как `GROUPS`.
+
+Проверка образца — одной командой, до того как писать:
+
+```powershell
+# найти реальный объект нужного вида и посмотреть его скелет
+Select-String -Path "$env:AX_AOT_PATH\Forms\*.xpo" -Pattern "^  OBJECTBANK" -Context 0,4 |
+  Select-Object -First 3
+```
+
+Балансировка блоков в `validate-xpo` такие ошибки **не ловит** — скобки сходятся,
+а порядок и обязательность секций нарушены. Ошибка вылезает только при импорте в
+AX, и формулировки там уводят в сторону («ожидалось ENDFORM»).
+
+### Форма БЕЗ источников данных
+
+`PROPERTIES` обязателен, `DATASOURCE` не должно быть вовсе:
+
+```
+  OBJECTBANK
+    PROPERTIES
+    ENDPROPERTIES
+
+  ENDOBJECTBANK
+```
+
+Порядок секций формы: `PROPERTIES` → `METHODS` → `OBJECTBANK` →
+`REFERENCEDATASOURCES` → `JOINS` → `PARTREFERENCES` → `DESIGN` → `PERMISSIONS` →
+`ENDFORM`.
+
+| Ошибка | Что скажет AX |
+|--------|---------------|
+| внутри пустой `DATASOURCE` с `METHODS` | `ожидалось OBJECTPOOL, но обнаружено METHODS` |
+| `OBJECTBANK` совсем пустой, без `PROPERTIES` | `ожидалось ENDFORM, но обнаружено REFERENCEDATASOURCES` |
+
+У формы С источником данных `METHODS` идёт **после** `ENDOBJECTPOOL` — отсюда и
+соблазн скопировать блок не у той формы.
+
+### Диалог подтверждения (текст + две кнопки)
+
+Кнопки класть в `BUTTONGROUP`, а не в обычный `GROUP`. Команды кнопок — числовые:
+**263 = OK**, **264 = Cancel**; `closedOk()` вернёт результат вызывающему.
+Многострочный текст — `STRINGEDIT` с числовым `DisplayHeight`, `AllowEdit #No`,
+`ShowLabel #No`, `AutoDeclaration #Yes` (иначе к контролу не обратиться из кода).
+
+Проверенные значения свойств: `FrameType #None`, `Columns #2`, `ShowLabel #No`,
+`ButtonDisplay #Text only`. Открытие из X++:
+
+```xpp
+args = new Args();
+args.name(formStr(МояФорма));
+args.parm(текст);
+
+formRun = classFactory.formRunClass(args);
+formRun.init();
+formRun.run();
+formRun.wait();     // модально
+
+return formRun.closedOk();
+```
+
+### Где на самом деле лежит исходник X++
+
+Пишешь код, который сканирует AOT (поиск по тексту, массовый разбор) — помни:
+**исходник лежит в записях МЕТОДОВ, а не объекта.**
+
+| Хочешь исходник | Где он |
+|---|---|
+| класса | `UtilElements` с `RecordType` = `ClassInstanceMethod`, `ClassStaticMethod`, `ClassInternalHeader` (последнее — `classDeclaration`) |
+| таблицы | `TableInstanceMethod`, `TableStaticMethod`, `TableInternalHeader` |
+| формы, джоба, запроса | запись самого объекта |
+
+У записи класса поле `Source` **пусто** — запрос по `RecordType == Class` вернёт
+ноль совпадений и будет выглядеть как «в приложении такого текста нет». Та же
+природа у `TreeNode.AOTgetSource()`: на узле класса он тоже пуст, текст живёт в
+дочерних узлах-методах.
+
+Родительский объект по записи метода — `xUtilElements::parentName()`.
+Готовый движок обхода с чанкованием — `SysUtilScanSource` (`newFindNow` +
+`doForAWhile`): он сам сканирует около секунды и возвращает управление.
+
+### Таблица
+
+Блок `INDICES` **без** обёрток `INDEX`/`ENDINDEX` (в отличие от `GROUPS`, где
+`GROUP`/`ENDGROUP` обязательны) — проверяется `check_indices_shape`.
+
+## 4. Backlog v2+ (не делать молча в v1)
 
 - Каркасы Privilege / Duty / Role / MenuItemOutput под `AX_OBJECT_PREFIX`
 - Round-trip extract Resource из `.xpo` → hash compare CLI
