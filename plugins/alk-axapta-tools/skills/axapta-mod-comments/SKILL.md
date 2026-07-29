@@ -534,11 +534,11 @@ class SysMonAlertGenerateEngine_CDT
 // ПРАВИЛЬНО
     while select name, recordType from utilElements
         group by name, recordType
-        where (   utilElements.recordType   == UtilElementType::Class
-               || utilElements.recordType   == UtilElementType::Table
-               || utilElements.recordType   == UtilElementType::Form
-               || utilElements.recordType   == UtilElementType::Query)
-           &&     utilElements.name         like namePattern
+        where (      utilElements.recordType   == UtilElementType::Class
+                ||   utilElements.recordType   == UtilElementType::Table
+                ||   utilElements.recordType   == UtilElementType::Form
+                ||   utilElements.recordType   == UtilElementType::Query)
+           &&        utilElements.name         like namePattern
 
 // НЕПРАВИЛЬНО — вложенность не видна, операторы вразнобой
     while select name, recordType from utilElements
@@ -550,13 +550,21 @@ class SysMonAlertGenerateEngine_CDT
            && utilElements.name       like namePattern
 ```
 
-Разбор правильного варианта:
+Разбор правильного варианта — три независимые колонки:
+
+| Что | Колонка | Правило |
+|---|---|---|
+| `(`, `||`, `&&` | 15 / 17 / 12 | по уровню вложенности: `||` внутри скобок правее `(`, внешний `&&` левее всех |
+| операнды | 22 | одна колонка для всех строк условия |
+| `==`, `like` | 48 | одна колонка независимо от длины операнда |
+
 - после `where (` идут пробелы, чтобы первый операнд встал в ту же колонку, что и
   операнды следующих строк — открывающая скобка не «съедает» выравнивание;
-- `||` внутри скобок сдвинуты глубже, чем внешний `&&`: по отступу сразу видно,
-  что это одна группа, объединённая с остальным условием по И;
-- имена полей выровнены в колонку, `==` и `like` — в свою, поэтому глазом
-  сканируется «что с чем сравнивается», а не разбирается построчно.
+- `||` сдвинуты правее `(`, а внешний `&&` — левее всех: по отступу сразу видно,
+  что группа из четырёх условий объединена с пятым по И;
+- операторы сравнения выровнены **несмотря на разную длину операндов**
+  (`utilElements.recordType` против `utilElements.name`) — короткий операнд
+  добивается пробелами, а не оставляется как есть.
 
 **Строки в выражениях запроса должны быть ограниченными.** Неограниченный `str`
 в `where` компилятор отвергает (`Err:103`, «Использование контейнеров и полей
