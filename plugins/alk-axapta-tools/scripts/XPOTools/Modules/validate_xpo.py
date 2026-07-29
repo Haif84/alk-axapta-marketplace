@@ -188,6 +188,69 @@ def check_indices_shape(path: pathlib.Path, text: str) -> List[Issue]:
     return issues
 
 
+def check_form_objectbank(path: pathlib.Path, text: str, mnemonic: str) -> List[Issue]:
+    """Блок OBJECTBANK формы БЕЗ источников данных обязан выглядеть так:
+
+        OBJECTBANK
+          PROPERTIES
+          ENDPROPERTIES
+
+        ENDOBJECTBANK
+
+    PROPERTIES обязателен, DATASOURCE отсутствует. Ошибиться можно двумя
+    способами, и оба ловятся только импортом в AX:
+
+    1. Написать внутри пустой `DATASOURCE` с `METHODS` — по аналогии с формой, у
+       которой источник данных ЕСТЬ (там METHODS идёт после ENDOBJECTPOOL).
+       AX: «ожидалось OBJECTPOOL, но обнаружено METHODS».
+    2. Оставить OBJECTBANK совсем пустым, без PROPERTIES. Парсер считает форму
+       законченной и падает на следующей секции:
+       «ожидалось ENDFORM, но обнаружено REFERENCEDATASOURCES».
+
+    Эталон снят с боевой выгрузки AX 2012 (`%AX_AOT_PATH%\\Forms`), а НЕ с
+    BM.xpo: BM — экспорт AX 3.0, там секции REFERENCEDATASOURCES ещё не было.
+    """
+    if mnemonic != "FRM":
+        return []
+
+    lines = text.splitlines()
+    start = end = None
+    for lineno, line in enumerate(lines, 1):
+        stripped = line.strip()
+        if stripped == "OBJECTBANK" and start is None:
+            start = lineno
+        elif stripped == "ENDOBJECTBANK" and start is not None:
+            end = lineno
+            break
+
+    if start is None or end is None:
+        return []
+
+    block = [ln.strip() for ln in lines[start:end - 1]]
+    has_properties = "PROPERTIES" in block
+    has_datasource = "DATASOURCE" in block
+    has_objectpool = any(ln.startswith("OBJECTPOOL") for ln in block)
+
+    issues: List[Issue] = []
+
+    if has_datasource and not has_objectpool:
+        issues.append(Issue(
+            str(path), "ERROR",
+            f"line {start}: DATASOURCE без OBJECTPOOL — у формы без источников "
+            f"данных блока DATASOURCE быть не должно вовсе, AX не импортирует "
+            f"(«ожидалось OBJECTPOOL»). Формат: OBJECTBANK -> PROPERTIES -> "
+            f"ENDPROPERTIES -> ENDOBJECTBANK"))
+
+    if not has_properties:
+        issues.append(Issue(
+            str(path), "ERROR",
+            f"line {start}: пустой OBJECTBANK — внутри нужен PROPERTIES/"
+            f"ENDPROPERTIES, иначе парсер считает форму законченной и падает на "
+            f"следующей секции («ожидалось ENDFORM»)"))
+
+    return issues
+
+
 #: Предел длины имени AOT-объекта в AX 2012 — EDT SysUtilElementName это STRING(40).
 MAX_OBJECT_NAME_LEN = 40
 
@@ -520,6 +583,7 @@ def validate_one(
     issues.extend(check_reserved_identifiers(path, text))
     obj = detect_object(path, text)
     issues.extend(check_object_name_length(path, obj[1]))
+    issues.extend(check_form_objectbank(path, text, obj[0]))
     if root is not None and obj[0]:
         issues.extend(check_layout_consistency(path, root, obj[0], text))
     return issues, obj
