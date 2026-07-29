@@ -524,6 +524,45 @@ class SysMonAlertGenerateEngine_CDT
 переменной становится длиннее, колонка ломается именно в тех строках, которых
 переименование не коснулось.
 
+### Форматирование SQL-запросов X++
+
+Условия в `where` выравниваются **по уровням вложенности скобок**: операторы
+`&&`/`||` одного уровня стоят в одной колонке, вложенные — глубже внешних.
+Операнды и операторы сравнения тоже идут столбцами.
+
+```xpp
+// ПРАВИЛЬНО
+    while select name, recordType from utilElements
+        group by name, recordType
+        where (   utilElements.recordType   == UtilElementType::Class
+               || utilElements.recordType   == UtilElementType::Table
+               || utilElements.recordType   == UtilElementType::Form
+               || utilElements.recordType   == UtilElementType::Query)
+           &&     utilElements.name         like namePattern
+
+// НЕПРАВИЛЬНО — вложенность не видна, операторы вразнобой
+    while select name, recordType from utilElements
+        group by name, recordType
+        where (utilElements.recordType == UtilElementType::Class
+            || utilElements.recordType == UtilElementType::Table
+            || utilElements.recordType == UtilElementType::Form
+            || utilElements.recordType == UtilElementType::Query)
+           && utilElements.name       like namePattern
+```
+
+Разбор правильного варианта:
+- после `where (` идут пробелы, чтобы первый операнд встал в ту же колонку, что и
+  операнды следующих строк — открывающая скобка не «съедает» выравнивание;
+- `||` внутри скобок сдвинуты глубже, чем внешний `&&`: по отступу сразу видно,
+  что это одна группа, объединённая с остальным условием по И;
+- имена полей выровнены в колонку, `==` и `like` — в свою, поэтому глазом
+  сканируется «что с чем сравнивается», а не разбирается построчно.
+
+**Строки в выражениях запроса должны быть ограниченными.** Неограниченный `str`
+в `where` компилятор отвергает (`Err:103`, «Использование контейнеров и полей
+с неограниченными строками в выражении») — объявляй как `str 4000` (или уже,
+по смыслу поля).
+
 ### camelCase и общепризнанные аббревиатуры
 
 Имена — в camel-нотации. Исключение — общепризнанные аббревиатуры (`MCP`, `JSON`,
