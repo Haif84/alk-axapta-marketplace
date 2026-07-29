@@ -31,6 +31,11 @@ Preflight-гейт для скиллов — прогнать этот файл 
 exit code 0 = конфигурация полная, 1 = есть ошибки (см. stderr).
 """
 
+# Обязателен, пока минимум XPOTools — Python 3.9: аннотации PEP 604
+# (`pathlib.Path | None` в find_project_config) без него вычисляются при импорте
+# и роняют весь модуль (а с ним preflight и все команды) с TypeError на 3.9.
+from __future__ import annotations
+
 import json
 import os
 import pathlib

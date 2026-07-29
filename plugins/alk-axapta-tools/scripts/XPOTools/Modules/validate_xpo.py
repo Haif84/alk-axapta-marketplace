@@ -32,7 +32,7 @@ import sys
 from typing import Dict, List, Optional, Tuple
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from xpo_types import XPO_TYPES, NO_MARKER_REQUIRED, dir_path_for  # noqa: E402
+from xpo_types import XPO_TYPES, NO_MARKER_REQUIRED, dir_path_for, _AX_MNEMONIC_ALIASES  # noqa: E402
 from config import load_config, validate_config, print_config_warnings  # noqa: E402
 from reserved_words import RESERVED_WORDS  # noqa: E402
 
@@ -61,6 +61,16 @@ NAME_RES = {
     "RES": re.compile(r"^\s*RESOURCENODE\s+#(\S+)"),
     "LBF": re.compile(r"^\s*LABELFILE\s+#(\S+)"),
     "SRS": re.compile(r"^\s*SSRSREPORT\s+#(\S+)"),
+    # Канонические ключи security/config — сами по себе в ***Element: не
+    # встречаются (AOS пишет алиасы SPV/SDT/SRO/SPC/SPO/SCP/CON), но detect_object
+    # резолвит алиас через _AX_MNEMONIC_ALIASES именно в эти ключи.
+    "CFG": re.compile(r"^\s*CONFIGURATIONKEY\s+#(\S+)"),
+    "PRV": re.compile(r"^\s*PRIVILEGE\s+#(\S+)"),
+    "DUT": re.compile(r"^\s*DUTY\s+#(\S+)"),
+    "ROL": re.compile(r"^\s*ROLE\s+#(\S+)"),
+    "PCY": re.compile(r"^\s*PROCESSCYCLE\s+#(\S+)"),
+    "POL": re.compile(r"^\s*POLICY\s+#(\S+)"),
+    "CDP": re.compile(r"^\s*CODEPERMISSION\s+#(\S+)"),
 }
 
 MOJIBAKE_RE = re.compile(r"Ð[-¿]|Ñ[-¿]|Â[ -ÿ]|â„–|â€")
@@ -384,7 +394,11 @@ def detect_object(path: pathlib.Path, text: str) -> Tuple[str, str]:
     if not mnemonic:
         return ("", "")
     name = ""
-    name_re = NAME_RES.get(mnemonic)
+    # AOS Export пишет алиасные мнемоники (DBT для Table, SRO для Role, UTS/UTI/...
+    # для EDT) — NAME_RES ключуется каноническими, поэтому без резолва алиаса имя
+    # оставалось пустым и проверки по имени (длина, дубликаты) для реальных
+    # AOS-выгрузок молча не работали.
+    name_re = NAME_RES.get(mnemonic) or NAME_RES.get(_AX_MNEMONIC_ALIASES.get(mnemonic, ""))
     if name_re:
         for line in lines[:200]:
             m = name_re.match(line)
