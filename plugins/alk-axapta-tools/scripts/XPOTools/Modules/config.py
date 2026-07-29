@@ -1,10 +1,18 @@
 """Конфигурация XPOTools.
 
 Источники значений (по убыванию приоритета):
-  1. Переменные окружения AX_PROJECT_ID, AX_USER_NICK, AX_AOT_PATH,
+  1. .axapta.json в папке проекта (ищется вверх от текущей директории) —
+     перекрывает всё остальное; нужен репозиториям, чья модификация ведётся не
+     под глобальным кодом проекта (например CIT000 при AX_PROJECT_ID=ALK_DEVAX12)
+  2. Переменные окружения AX_PROJECT_ID, AX_USER_NICK, AX_AOT_PATH,
      AX_OBJECT_PREFIX, AX_OBJECT_SUFFIX
-  2. <XPOTools>/config.local.json (gitignored)
-  3. <XPOTools>/config.example.json (под git, плейсхолдеры)
+  3. <XPOTools>/config.local.json (gitignored)
+  4. <XPOTools>/config.example.json (под git, плейсхолдеры)
+
+Файл проекта задаёт только те ключи, которые нужно перекрыть, — остальные
+подхватываются из ENV как обычно. Пустая строка в нём тоже значима (например
+"AX_OBJECT_PREFIX": "" при заданном суффиксе), поэтому ключ учитывается по факту
+присутствия, а не по непустому значению.
 
 Все пять ключей обязательны (см. validate_config()), кроме пары
 AX_OBJECT_PREFIX/AX_OBJECT_SUFFIX — из них должен быть задан РОВНО ОДИН.
@@ -22,6 +30,11 @@ Preflight-гейт для скиллов — прогнать этот файл 
     python config.py
 exit code 0 = конфигурация полная, 1 = есть ошибки (см. stderr).
 """
+
+# Обязателен, пока минимум XPOTools — Python 3.9: аннотации PEP 604
+# (`pathlib.Path | None` в find_project_config) без него вычисляются при импорте
+# и роняют весь модуль (а с ним preflight и все команды) с TypeError на 3.9.
+from __future__ import annotations
 
 import json
 import os
@@ -48,6 +61,20 @@ _LEGACY_KEY_MAP = {
 }
 
 _ROOT = pathlib.Path(__file__).resolve().parent.parent  # XPOTools/
+
+# Конфиг уровня папки проекта. Ищется вверх от CWD — так он работает и когда
+# инструмент запускают из подкаталога репозитория.
+PROJECT_CONFIG_NAME = ".axapta.json"
+
+
+def find_project_config(start: pathlib.Path | None = None) -> pathlib.Path | None:
+    """Ближайший .axapta.json вверх по дереву от start (по умолчанию — CWD)."""
+    current = (start or pathlib.Path.cwd()).resolve()
+    for folder in (current, *current.parents):
+        candidate = folder / PROJECT_CONFIG_NAME
+        if candidate.is_file():
+            return candidate
+    return None
 
 
 def _read_json(path: pathlib.Path) -> dict:
@@ -91,6 +118,15 @@ def load_config() -> dict:
         env = os.environ.get(k)
         if env:
             out[k] = env
+
+    # Конфиг проекта — последним, он важнее ENV. Ключ учитывается по присутствию:
+    # пустая строка здесь legitimate (гасит унаследованный из ENV префикс, когда
+    # проект использует суффикс).
+    project_path = find_project_config()
+    if project_path:
+        project = _read_json(project_path)
+        out.update({k: v for k, v in project.items() if k in KEYS})
+
     return out
 
 
@@ -136,6 +172,11 @@ def print_config_warnings(warns: list[str]) -> None:
 if __name__ == "__main__":
     import sys
     cfg = load_config()
+
+    project_path = find_project_config()
+    if project_path:
+        print(f"[конфиг проекта] {project_path} (перекрывает ENV)")
+
     for k in KEYS:
         print(f"{k} = {cfg[k]!r}")
 

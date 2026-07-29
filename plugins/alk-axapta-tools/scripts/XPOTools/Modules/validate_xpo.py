@@ -32,7 +32,7 @@ import sys
 from typing import Dict, List, Optional, Tuple
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from xpo_types import XPO_TYPES, NO_MARKER_REQUIRED, dir_path_for  # noqa: E402
+from xpo_types import XPO_TYPES, NO_MARKER_REQUIRED, dir_path_for, _AX_MNEMONIC_ALIASES  # noqa: E402
 from config import load_config, validate_config, print_config_warnings  # noqa: E402
 from reserved_words import RESERVED_WORDS  # noqa: E402
 
@@ -61,6 +61,16 @@ NAME_RES = {
     "RES": re.compile(r"^\s*RESOURCENODE\s+#(\S+)"),
     "LBF": re.compile(r"^\s*LABELFILE\s+#(\S+)"),
     "SRS": re.compile(r"^\s*SSRSREPORT\s+#(\S+)"),
+    # Канонические ключи security/config — сами по себе в ***Element: не
+    # встречаются (AOS пишет алиасы SPV/SDT/SRO/SPC/SPO/SCP/CON), но detect_object
+    # резолвит алиас через _AX_MNEMONIC_ALIASES именно в эти ключи.
+    "CFG": re.compile(r"^\s*CONFIGURATIONKEY\s+#(\S+)"),
+    "PRV": re.compile(r"^\s*PRIVILEGE\s+#(\S+)"),
+    "DUT": re.compile(r"^\s*DUTY\s+#(\S+)"),
+    "ROL": re.compile(r"^\s*ROLE\s+#(\S+)"),
+    "PCY": re.compile(r"^\s*PROCESSCYCLE\s+#(\S+)"),
+    "POL": re.compile(r"^\s*POLICY\s+#(\S+)"),
+    "CDP": re.compile(r"^\s*CODEPERMISSION\s+#(\S+)"),
 }
 
 MOJIBAKE_RE = re.compile(r"Ð[-¿]|Ñ[-¿]|Â[ -ÿ]|â„–|â€")
@@ -146,6 +156,53 @@ def check_mojibake(path: pathlib.Path, text: str) -> List[Issue]:
         return [Issue(str(path), "ERROR",
                       f"mojibake detected ({len(matches)} occurrences, sample: {sample})")]
     return []
+
+
+def check_indices_shape(path: pathlib.Path, text: str) -> List[Issue]:
+    """Блок INDICES в таблице НЕ использует обёртки INDEX/ENDINDEX — в отличие от
+    GROUPS, где GROUP/ENDGROUP как раз нужны. Формат:
+
+        INDICES
+          #ИмяИндекса
+          PROPERTIES
+            ...
+          ENDPROPERTIES
+          INDEXFIELDS
+            #Поле
+          ENDINDEXFIELDS
+        ENDINDICES
+
+    Написание `INDEX #Имя` валит импорт в AX: парсер принимает слово INDEX за имя
+    индекса и падает на следующей строке («ожидалось PROPERTIES, но обнаружено
+    #Имя»). Балансировка блоков такого не ловит, поэтому проверяем отдельно.
+    """
+    issues: List[Issue] = []
+    for lineno, line in enumerate(text.splitlines(), 1):
+        stripped = line.strip()
+        if re.match(r"^(INDEX|ENDINDEX)\b", stripped):
+            issues.append(Issue(
+                str(path), "ERROR",
+                f"line {lineno}: {stripped.split()[0]} внутри INDICES — обёрток "
+                f"INDEX/ENDINDEX в формате xpo нет, AX не импортирует. "
+                f"Формат: INDICES -> #ИмяИндекса -> PROPERTIES"))
+    return issues
+
+
+#: Предел длины имени AOT-объекта в AX 2012 — EDT SysUtilElementName это STRING(40).
+MAX_OBJECT_NAME_LEN = 40
+
+
+def check_object_name_length(path: pathlib.Path, name: str) -> List[Issue]:
+    """Имя AOT-объекта длиннее 40 символов AX не примет. Сокращать надо ЗАРАНЕЕ и
+    осмысленно — ужимать самые длинные слова, сохраняя смысл
+    (`CIT_DevToolPanel_Display_SysMCPParameters_CDT` -> `..._SysMCPParms_CDT`),
+    а не полагаться на то, что кто-то обрежет имя за тебя."""
+    if not name or len(name) <= MAX_OBJECT_NAME_LEN:
+        return []
+    return [Issue(
+        str(path), "ERROR",
+        f"имя объекта {name!r} — {len(name)} символов, предел {MAX_OBJECT_NAME_LEN}. "
+        f"Сократи самые длинные слова с сохранением смысла")]
 
 
 def check_markers(path: pathlib.Path, text: str, prefix: str) -> List[Issue]:
@@ -337,7 +394,11 @@ def detect_object(path: pathlib.Path, text: str) -> Tuple[str, str]:
     if not mnemonic:
         return ("", "")
     name = ""
-    name_re = NAME_RES.get(mnemonic)
+    # AOS Export пишет алиасные мнемоники (DBT для Table, SRO для Role, UTS/UTI/...
+    # для EDT) — NAME_RES ключуется каноническими, поэтому без резолва алиаса имя
+    # оставалось пустым и проверки по имени (длина, дубликаты) для реальных
+    # AOS-выгрузок молча не работали.
+    name_re = NAME_RES.get(mnemonic) or NAME_RES.get(_AX_MNEMONIC_ALIASES.get(mnemonic, ""))
     if name_re:
         for line in lines[:200]:
             m = name_re.match(line)
@@ -453,10 +514,12 @@ def validate_one(
     text = raw.decode("utf-8", errors="replace")
     issues.extend(check_balance(path, text))
     issues.extend(check_mojibake(path, text))
+    issues.extend(check_indices_shape(path, text))
     issues.extend(check_markers(path, text, prefix))
     issues.extend(check_source_block_wrapping(path, text, prefix))
     issues.extend(check_reserved_identifiers(path, text))
     obj = detect_object(path, text)
+    issues.extend(check_object_name_length(path, obj[1]))
     if root is not None and obj[0]:
         issues.extend(check_layout_consistency(path, root, obj[0], text))
     return issues, obj
@@ -468,6 +531,11 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Валидатор xpo-файлов")
     parser.add_argument("target", help="Файл или директория")
     parser.add_argument("--strict", action="store_true", help="WARN'ы тоже считать ошибками (exit != 0)")
+    parser.add_argument(
+        "--project-code", default="", metavar="CODE",
+        help="Код проекта для проверки мод-маркеров; перекрывает AX_PROJECT_ID. "
+             "Нужен репозиториям, чей код проекта отличается от глобальной ENV — "
+             "например --project-code CIT000 при AX_PROJECT_ID=ALK_DEVAX12")
     args = parser.parse_args()
 
     target = pathlib.Path(args.target).resolve()
@@ -476,7 +544,10 @@ def main() -> int:
         print(f"ERROR: нет .xpo файлов в {target}", file=sys.stderr)
         return 2
 
-    prefix = cfg.get("AX_PROJECT_ID", "") or ""
+    # Явный --project-code важнее глобальной ENV: один репозиторий может вести
+    # модификацию под чужим кодом проекта (например CIT000 в общем тулинге),
+    # и тогда AX_PROJECT_ID из ENV дал бы ложные WARN на каждом файле.
+    prefix = args.project_code or (cfg.get("AX_PROJECT_ID", "") or "")
     if "<" in prefix:
         prefix = ""
 

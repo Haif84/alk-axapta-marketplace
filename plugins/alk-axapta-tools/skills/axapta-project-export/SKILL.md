@@ -159,6 +159,15 @@ validate-xpo <project>\XPO --strict
 
 Валидатор проверяет: BOM+CRLF, балансировку блоков (PROJECT/ENDPROJECT, GROUP/ENDGROUP, BEGINNODE/ENDNODE, SOURCE/ENDSOURCE, PROPERTIES/ENDPROPERTIES), отсутствие mojibake, наличие маркеров `axapta-mod-comments`, уникальность имён объектов между .xpo. Если exit ≠ 0 — **остановиться**, разобрать ошибки.
 
+**Если код проекта в маркерах отличается от глобальной `AX_PROJECT_ID`** (репозиторий
+ведёт модификацию под чужим кодом — например `CIT000` в общем тулинге, тогда как ENV
+настроена на `ALK_DEVAX12`), передавай его явно, иначе валидатор выдаст ложный WARN
+на каждом файле:
+
+```powershell
+validate-xpo <project>\XPO --strict --project-code CIT000
+```
+
 При обнаружении mojibake (артефакты вроде `Ð`, `Ñ`, `â„–`) — вызвать `fix-mojibake <project>\XPO`, повторить `validate-xpo`. Только после зелёного валидатора переходить к §4.
 
 ### 4. Подтверждение списка
