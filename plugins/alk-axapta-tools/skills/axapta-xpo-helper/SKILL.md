@@ -163,6 +163,26 @@ formRun.wait();     // модально
 return formRun.closedOk();
 ```
 
+### Где на самом деле лежит исходник X++
+
+Пишешь код, который сканирует AOT (поиск по тексту, массовый разбор) — помни:
+**исходник лежит в записях МЕТОДОВ, а не объекта.**
+
+| Хочешь исходник | Где он |
+|---|---|
+| класса | `UtilElements` с `RecordType` = `ClassInstanceMethod`, `ClassStaticMethod`, `ClassInternalHeader` (последнее — `classDeclaration`) |
+| таблицы | `TableInstanceMethod`, `TableStaticMethod`, `TableInternalHeader` |
+| формы, джоба, запроса | запись самого объекта |
+
+У записи класса поле `Source` **пусто** — запрос по `RecordType == Class` вернёт
+ноль совпадений и будет выглядеть как «в приложении такого текста нет». Та же
+природа у `TreeNode.AOTgetSource()`: на узле класса он тоже пуст, текст живёт в
+дочерних узлах-методах.
+
+Родительский объект по записи метода — `xUtilElements::parentName()`.
+Готовый движок обхода с чанкованием — `SysUtilScanSource` (`newFindNow` +
+`doForAWhile`): он сам сканирует около секунды и возвращает управление.
+
 ### Таблица
 
 Блок `INDICES` **без** обёрток `INDEX`/`ENDINDEX` (в отличие от `GROUPS`, где
