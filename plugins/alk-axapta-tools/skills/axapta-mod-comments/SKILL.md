@@ -467,6 +467,43 @@ CIT_DevToolPanel_Display_SysMCPParms_CDT        40 — Parameters -> Parms
 без миграции. `validate-xpo` проверяет предел автоматически, но подобрать
 осмысленный вариант он не может.
 
+### Выравнивание объявлений и присваиваний в столбцы
+
+Объявления переменных и группы присваиваний оформляются **столбцами**: имена
+выравниваются по общей колонке, знаки `=` — по своей. Так блок читается как
+таблица, а не как рваный текст.
+
+```xpp
+// ПРАВИЛЬНО
+class SysMonAlertGenerateEngine_CDT
+{
+    SysMonServiceTableExt_CDT           serviceTable;
+    SysMonServiceMetricsExt_CDT         serviceMetrics;
+    SysMonServiceMetricsValuesTmp_CDT   serviceMetricsValuesTmp;
+
+    boolean                             traceMode;
+    boolean                             skipAlerts;
+}
+
+    _alertTableTmp.CheckDateTime    = _checkDateTime;
+    _alertTableTmp.AlertSessionId   = _alertSessionId;
+    _alertTableTmp.Duration         = _duration;
+
+// НЕПРАВИЛЬНО — колонка «съехала», глазом не сканируется
+    SysMonServiceTableExt_CDT serviceTable;
+    boolean traceMode;
+
+    _alertTableTmp.CheckDateTime = _checkDateTime;
+    _alertTableTmp.AlertSessionId = _alertSessionId;
+```
+
+Смысловые группы разделяются пустой строкой — выравнивание считается внутри
+группы, а не по всему методу.
+
+**Отдельно проверяй выравнивание после переименований**: когда имя типа или
+переменной становится длиннее, колонка ломается именно в тех строках, которых
+переименование не коснулось.
+
 ### camelCase и общепризнанные аббревиатуры
 
 Имена — в camel-нотации. Исключение — общепризнанные аббревиатуры (`MCP`, `JSON`,
