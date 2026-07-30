@@ -258,8 +258,15 @@ def xpp_code_only(line: str, state: XppScanState = XPP_SCAN_START) -> Tuple[str,
 
 
 def iter_source_blocks(text: str):
-    """Отдаёт (имя метода, номер строки SOURCE, [(номер, содержимое-после-#)])."""
-    lines = text.splitlines()
+    """Отдаёт (имя метода, номер строки SOURCE, [(номер, содержимое-после-#)]).
+
+    Строки режем ТОЛЬКО по CRLF. `splitlines()` здесь нельзя: он делит ещё и по
+    одиночному CR, а тот встречается ВНУТРИ исходника как обычный символ —
+    например `case #X:<CR>    this.doIt();` в SitesSvcSyncErrorInfoAction.
+    Для AX это одна строка с префиксом '#', а `splitlines()` показывал вторую,
+    «потерявшую» префикс, и проверка ругалась на совершенно целый файл.
+    """
+    lines = text.split("\r\n") if "\r\n" in text else text.split("\n")
     name: Optional[str] = None
     start = 0
     body: List[Tuple[int, Optional[str]]] = []
@@ -330,6 +337,14 @@ def check_xpp_brace_balance(path: pathlib.Path, text: str) -> List[Issue]:
                 break
 
             code, state = xpp_code_only(content, state)
+
+            # Макрос отдельной строкой может развернуться во что угодно, включая
+            # открывающую скобку: `#ALK_DialogHeader` в CIT_SendAlert.dialog даёт
+            # весь заголовок метода, и в тексте остаётся только `}`.
+            if code.lstrip().startswith("#"):
+                ambiguous = True
+                break
+
             balance += code.count("{") - code.count("}")
 
         if ambiguous:

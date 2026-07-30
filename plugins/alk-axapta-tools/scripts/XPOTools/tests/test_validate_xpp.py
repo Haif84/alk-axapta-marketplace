@@ -52,6 +52,21 @@ GOOD = ["void doWork()", "{", "    if (x)", "    {", "        y = 1;", "    }", 
 
 class TestSourcePrefix(unittest.TestCase):
 
+    def test_lone_cr_inside_source_line(self):
+        """Одиночный CR внутри строки исходника — это символ, а не перевод строки.
+
+        Реальный случай (SitesSvcSyncErrorInfoAction.run):
+        `case #X:<CR>    this.doIt();` — для AX одна строка с префиксом '#'.
+        Разбор через splitlines() видел вторую строку «без префикса» и ругался
+        на совершенно целый файл.
+        """
+        crlf = cls_xpo(GOOD).replace(chr(10), chr(13) + chr(10))
+        text = crlf.replace("        #        y = 1;",
+                            "        #        y = 1;" + chr(13) + "        z = 2;")
+        self.assertEqual(check_source_prefix(FAKE, text), [])
+        self.assertEqual(check_xpp_brace_balance(FAKE, text), [])
+
+
     def test_good(self):
         self.assertEqual(check_source_prefix(FAKE, cls_xpo(GOOD)), [])
 
