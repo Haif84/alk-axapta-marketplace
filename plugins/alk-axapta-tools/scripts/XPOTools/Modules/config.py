@@ -203,15 +203,20 @@ def validate_modification() -> list[str]:
     return errors
 
 
-def modification_marker(date_str: str) -> str:
+def modification_marker(date_str: str, inline: bool = False) -> str:
     """Мод-маркер целиком из конфига. date_str — дата в формате ДД.ММ.ГГГГ.
 
     Смысл в том, чтобы формат жил в ОДНОМ месте: раньше его собирали руками в
     каждой сессии, и код проекта успел разъехаться с реальным (в одном
     репозитории 24 маркера ушли под неверным кодом).
+
+    Пробел после `//` зависит от места: в шапке объекта и в блоках `+/-`
+    маркер стоит отдельной строкой и пишется как `// CIT000, …`, а хвостовой
+    комментарий у одиночной вставленной строки — слитно, `код; //CIT000, …`.
+    inline=True даёт вторую форму.
     """
     cfg = load_config()
-    return (f"//{cfg['AX_PROJECT_ID']}, {cfg['AX_MODIFICATION_ID']}, "
+    return (f"//{'' if inline else ' '}{cfg['AX_PROJECT_ID']}, {cfg['AX_MODIFICATION_ID']}, "
             f"{cfg['AX_MODIFICATION_DESC']}, {date_str}, {cfg['AX_USER_NICK']}")
 
 
