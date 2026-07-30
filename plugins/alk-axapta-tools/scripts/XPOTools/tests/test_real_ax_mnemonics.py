@@ -17,7 +17,9 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "Modules"))
 
 import split_shared_project as splitter  # noqa: E402
-from xpo_types import find_object_name, name_re_for  # noqa: E402
+from xpo_types import (  # noqa: E402
+    find_object_name, name_re_for, detect_menuitem_subtype_from_lines,
+)
 
 
 class TestNameDetection(unittest.TestCase):
@@ -56,16 +58,16 @@ class TestMenuItemSubtype(unittest.TestCase):
         for code, expected in (("1", "FTM_DISPLAY"), ("2", "FTM_OUTPUT"), ("3", "FTM_ACTION")):
             with self.subTest(code=code):
                 body = ["  MENUITEM #Foo", f"    Type: {code}"]
-                self.assertEqual(splitter.detect_menuitem_subtype_from_body(body), expected)
+                self.assertEqual(detect_menuitem_subtype_from_lines(body), expected)
 
     def test_word_form_still_supported(self):
         body = ["  MENUITEM #Foo", "    Type                #Action"]
-        self.assertEqual(splitter.detect_menuitem_subtype_from_body(body), "FTM_ACTION")
+        self.assertEqual(detect_menuitem_subtype_from_lines(body), "FTM_ACTION")
 
     def test_unknown_is_empty_not_output(self):
         """Пустая строка, а не FTM_OUTPUT: прежний молчаливый дефолт и приводил
         к тому, что все пункты меню оказывались в одной папке."""
-        self.assertEqual(splitter.detect_menuitem_subtype_from_body(["  MENUITEM #Foo"]), "")
+        self.assertEqual(detect_menuitem_subtype_from_lines(["  MENUITEM #Foo"]), "")
 
 
 BUNDLE = """Exportfile for AOT version 1.0 or later

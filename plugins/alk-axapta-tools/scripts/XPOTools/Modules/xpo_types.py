@@ -153,6 +153,42 @@ NAME_RES = {
 }
 
 
+#: Подтип пункта меню по числу в строке `Type: N` — те же значения, что UTILTYPE
+#: (1=Display, 2=Output, 3=Action).
+_MENUITEM_SUBTYPE_BY_CODE = {"1": "FTM_DISPLAY", "2": "FTM_OUTPUT", "3": "FTM_ACTION"}
+
+
+def detect_menuitem_subtype_from_lines(lines) -> str:
+    """Подтип MenuItem из тела элемента; пустая строка, если не опознан.
+
+    AOT-экспорт AX пишет подтип числом отдельной строкой сразу за объявлением
+    (`MENUITEM #Foo` / `Type: 1`), сборщик проектов — словом (`Type #Display`).
+    Поддержаны обе формы: раньше каждый инструмент знал только словесную и на
+    реальной выгрузке не опознавал подтип НИКОГДА.
+    """
+    for line in lines:
+        s = line.strip()
+        m = re.match(r"^Type:\s*([123])\b", s)
+        if m:
+            return _MENUITEM_SUBTYPE_BY_CODE[m.group(1)]
+        if s.startswith("Type") and "#" in s:
+            v = s.split("#", 1)[-1].strip().lower()
+            if v in ("display", "output", "action"):
+                return "FTM_" + v.upper()
+    return ""
+
+
+#: Типы объектов, внутри которых кода нет вовсе: ни classDeclaration, ни
+#: _changeDeclaration, ни свойства для документации — мод-маркер поставить
+#: физически некуда. Принадлежность модификации у них фиксируется только
+#: именем и членством в проекте.
+NO_CODE_CONTAINER = {
+    "EDT", "UTS", "UTI", "UTR", "UTE", "UTQ", "UTU", "UTD", "UTT", "UTG", "UTW",
+    "BAS", "DBE", "CFG", "CON", "LIC", "TBC", "PER",
+    "FTM", "FTM_DISPLAY", "FTM_OUTPUT", "FTM_ACTION", "MNU", "RES", "LBF",
+}
+
+
 def name_re_for(mnemonic: str):
     """Регексп строки объявления по мнемонике из ***Element, с учётом алиасов.
 

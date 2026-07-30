@@ -23,7 +23,9 @@ import sys
 from typing import Dict, List, Tuple
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from xpo_types import XPO_TYPES, dir_path_for, find_object_name  # noqa: E402
+from xpo_types import (  # noqa: E402
+    XPO_TYPES, dir_path_for, find_object_name, detect_menuitem_subtype_from_lines,
+)
 
 if sys.platform == "win32":
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
@@ -48,33 +50,6 @@ def write_xpo(path: str, content: str) -> None:
     with open(path, "wb") as f:
         f.write(b"\xef\xbb\xbf")
         f.write(body)
-
-
-#: Подтип пункта меню по числу в строке `Type: N` — те же значения, что UTILTYPE
-#: в XPO_TYPES (1=Display, 2=Output, 3=Action).
-_MENUITEM_SUBTYPE_BY_CODE = {"1": "FTM_DISPLAY", "2": "FTM_OUTPUT", "3": "FTM_ACTION"}
-
-
-def detect_menuitem_subtype_from_body(body_lines: List[str]) -> str:
-    """Подтип MenuItem (Display/Output/Action) из тела элемента.
-
-    Реальная выгрузка AX 2012 пишет подтип числом отдельной строкой сразу за
-    объявлением: `MENUITEM #Foo` / `Type: 1`. Прежняя версия искала `Type` со
-    значением после `#`, такой строки в выгрузке нет — и КАЖДЫЙ пункт меню
-    молча уезжал в Output, а одноимённые пункты разных подтипов затирали друг
-    друга на диске. Форма со словом (`Type #Display`) тоже поддержана: её даёт
-    сборщик проектов.
-    """
-    for line in body_lines:
-        s = line.strip()
-        m = re.match(r"^Type:\s*([123])\b", s)
-        if m:
-            return _MENUITEM_SUBTYPE_BY_CODE[m.group(1)]
-        if s.startswith("Type") and "#" in s:
-            v = s.split("#", 1)[-1].strip().lower()
-            if v in ("display", "output", "action"):
-                return "FTM_" + v.upper()
-    return ""
 
 
 def find_name(mnemonic: str, lines: List[str]) -> str:
@@ -107,7 +82,7 @@ def split_bundle(src: pathlib.Path, dst: pathlib.Path, layout: str = "flat") -> 
 
         # Определяем mnemonic для FTM с подтипом.
         if kind == "FTM":
-            mnemonic = detect_menuitem_subtype_from_body(body)
+            mnemonic = detect_menuitem_subtype_from_lines(body)
             if not mnemonic:
                 print(f"WARNING: не удалось определить подтип MenuItem "
                       f"(line {line_no + 1}), skipped", file=sys.stderr)
