@@ -23,7 +23,7 @@ import sys
 from typing import Dict, List, Tuple
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from xpo_types import XPO_TYPES, dir_path_for  # noqa: E402
+from xpo_types import XPO_TYPES, dir_path_for, find_object_name  # noqa: E402
 
 if sys.platform == "win32":
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
@@ -31,26 +31,6 @@ if sys.platform == "win32":
 
 
 ELEMENT_RE = re.compile(r"^\*\*\*Element:\s*(\w+)\s*$")
-NAME_RES = {
-    "CLS": re.compile(r"^\s*CLASS\s+#(\S+)"),
-    "TAB": re.compile(r"^\s*TABLE\s+#(\S+)"),
-    "FRM": re.compile(r"^\s*FORM\s+#(\S+)"),
-    "MNU": re.compile(r"^\s*MENU\s+#(\S+)"),
-    "FTM": re.compile(r"^\s*MENUITEM\s+#(\S+)"),
-    # Job не оборачивается в NODE (в отличие от CLASS/TABLE/...) — реальный
-    # экспорт AX 2012 идёт сразу JOBVERSION -> SOURCE #<Name> -> PROPERTIES,
-    # без JOBNODE. У задачи ровно один SOURCE-блок, и это сам джоб.
-    "JOB": re.compile(r"^\s*SOURCE\s+#(\S+)"),
-    "QUE": re.compile(r"^\s*QUERY\s+#(\S+)"),
-    "MAC": re.compile(r"^\s*MACRO\s+#(\S+)"),
-    "EDT": re.compile(r"^\s*EXTENDEDTYPE\s+#(\S+)"),
-    "BAS": re.compile(r"^\s*ENUMTYPE\s+#(\S+)"),
-    "MAP": re.compile(r"^\s*MAP\s+#(\S+)"),
-    "VIE": re.compile(r"^\s*VIEW\s+#(\S+)"),
-    "RES": re.compile(r"^\s*RESOURCENODE\s+#(\S+)"),
-    "LBF": re.compile(r"^\s*LABELFILE\s+#(\S+)"),
-    "SRS": re.compile(r"^\s*SSRSREPORT\s+#(\S+)"),
-}
 
 
 def read_lines(path: str) -> List[str]:
@@ -70,31 +50,36 @@ def write_xpo(path: str, content: str) -> None:
         f.write(body)
 
 
+#: Подтип пункта меню по числу в строке `Type: N` — те же значения, что UTILTYPE
+#: в XPO_TYPES (1=Display, 2=Output, 3=Action).
+_MENUITEM_SUBTYPE_BY_CODE = {"1": "FTM_DISPLAY", "2": "FTM_OUTPUT", "3": "FTM_ACTION"}
+
+
 def detect_menuitem_subtype_from_body(body_lines: List[str]) -> str:
-    """Определяет подтип MenuItem (Display/Output/Action) по UTILTYPE-узлу
-    или по полю Type в PROPERTIES."""
+    """Подтип MenuItem (Display/Output/Action) из тела элемента.
+
+    Реальная выгрузка AX 2012 пишет подтип числом отдельной строкой сразу за
+    объявлением: `MENUITEM #Foo` / `Type: 1`. Прежняя версия искала `Type` со
+    значением после `#`, такой строки в выгрузке нет — и КАЖДЫЙ пункт меню
+    молча уезжал в Output, а одноимённые пункты разных подтипов затирали друг
+    друга на диске. Форма со словом (`Type #Display`) тоже поддержана: её даёт
+    сборщик проектов.
+    """
     for line in body_lines:
         s = line.strip()
+        m = re.match(r"^Type:\s*([123])\b", s)
+        if m:
+            return _MENUITEM_SUBTYPE_BY_CODE[m.group(1)]
         if s.startswith("Type") and "#" in s:
             v = s.split("#", 1)[-1].strip().lower()
-            if v == "display":
-                return "FTM_DISPLAY"
-            if v == "output":
-                return "FTM_OUTPUT"
-            if v == "action":
-                return "FTM_ACTION"
-    return "FTM_OUTPUT"
+            if v in ("display", "output", "action"):
+                return "FTM_" + v.upper()
+    return ""
 
 
 def find_name(mnemonic: str, lines: List[str]) -> str:
-    rx = NAME_RES.get(mnemonic)
-    if not rx:
-        return ""
-    for line in lines:
-        m = rx.match(line)
-        if m:
-            return m.group(1)
-    return ""
+    """Имя объекта. Алиасы мнемоник разрешает общая таблица в xpo_types."""
+    return find_object_name(mnemonic, lines)
 
 
 def split_bundle(src: pathlib.Path, dst: pathlib.Path, layout: str = "flat") -> List[Tuple[str, str]]:
@@ -123,6 +108,10 @@ def split_bundle(src: pathlib.Path, dst: pathlib.Path, layout: str = "flat") -> 
         # Определяем mnemonic для FTM с подтипом.
         if kind == "FTM":
             mnemonic = detect_menuitem_subtype_from_body(body)
+            if not mnemonic:
+                print(f"WARNING: не удалось определить подтип MenuItem "
+                      f"(line {line_no + 1}), skipped", file=sys.stderr)
+                continue
         else:
             mnemonic = kind
 
@@ -148,6 +137,13 @@ def split_bundle(src: pathlib.Path, dst: pathlib.Path, layout: str = "flat") -> 
             target = target_dir / f"{name}.xpo"
         else:
             target = dst / f"{meta['file_prefix']}{name}.xpo"
+
+        # Молчаливая перезапись означала бы потерю объекта: одноимённые пункты
+        # меню разных подтипов и раньше затирали друг друга именно так.
+        if target.exists():
+            print(f"WARNING: {target} уже существует, пропущен второй объект "
+                  f"{kind} {name} (line {line_no + 1})", file=sys.stderr)
+            continue
 
         write_xpo(str(target), out)
         written.append((kind, str(target)))

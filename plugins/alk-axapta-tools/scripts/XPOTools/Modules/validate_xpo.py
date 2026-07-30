@@ -32,7 +32,9 @@ import sys
 from typing import Dict, List, Optional, Tuple
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from xpo_types import XPO_TYPES, NO_MARKER_REQUIRED, dir_path_for, _AX_MNEMONIC_ALIASES  # noqa: E402
+from xpo_types import (  # noqa: E402
+    XPO_TYPES, NO_MARKER_REQUIRED, dir_path_for, name_re_for,
+)
 from config import load_config, validate_config, print_config_warnings  # noqa: E402
 from reserved_words import RESERVED_WORDS  # noqa: E402
 
@@ -42,36 +44,6 @@ if sys.platform == "win32":
 
 
 ELEMENT_RE = re.compile(r"^\*\*\*Element:\s*(\w+)\s*$")
-NAME_RES = {
-    "CLS": re.compile(r"^\s*CLASS\s+#(\S+)"),
-    "TAB": re.compile(r"^\s*TABLE\s+#(\S+)"),
-    "FRM": re.compile(r"^\s*FORM\s+#(\S+)"),
-    "MNU": re.compile(r"^\s*MENU\s+#(\S+)"),
-    "FTM": re.compile(r"^\s*MENUITEM\s+#(\S+)"),
-    # Job не оборачивается в NODE (в отличие от CLASS/TABLE/...) — реальный
-    # экспорт AX 2012 идёт сразу JOBVERSION -> SOURCE #<Name> -> PROPERTIES,
-    # без JOBNODE. У задачи ровно один SOURCE-блок, и это сам джоб.
-    "JOB": re.compile(r"^\s*SOURCE\s+#(\S+)"),
-    "QUE": re.compile(r"^\s*QUERY\s+#(\S+)"),
-    "MAC": re.compile(r"^\s*MACRO\s+#(\S+)"),
-    "EDT": re.compile(r"^\s*EXTENDEDTYPE\s+#(\S+)"),
-    "BAS": re.compile(r"^\s*ENUMTYPE\s+#(\S+)"),
-    "MAP": re.compile(r"^\s*MAP\s+#(\S+)"),
-    "VIE": re.compile(r"^\s*VIEW\s+#(\S+)"),
-    "RES": re.compile(r"^\s*RESOURCENODE\s+#(\S+)"),
-    "LBF": re.compile(r"^\s*LABELFILE\s+#(\S+)"),
-    "SRS": re.compile(r"^\s*SSRSREPORT\s+#(\S+)"),
-    # Канонические ключи security/config — сами по себе в ***Element: не
-    # встречаются (AOS пишет алиасы SPV/SDT/SRO/SPC/SPO/SCP/CON), но detect_object
-    # резолвит алиас через _AX_MNEMONIC_ALIASES именно в эти ключи.
-    "CFG": re.compile(r"^\s*CONFIGURATIONKEY\s+#(\S+)"),
-    "PRV": re.compile(r"^\s*PRIVILEGE\s+#(\S+)"),
-    "DUT": re.compile(r"^\s*DUTY\s+#(\S+)"),
-    "ROL": re.compile(r"^\s*ROLE\s+#(\S+)"),
-    "PCY": re.compile(r"^\s*PROCESSCYCLE\s+#(\S+)"),
-    "POL": re.compile(r"^\s*POLICY\s+#(\S+)"),
-    "CDP": re.compile(r"^\s*CODEPERMISSION\s+#(\S+)"),
-}
 
 MOJIBAKE_RE = re.compile(r"Ð[-¿]|Ñ[-¿]|Â[ -ÿ]|â„–|â€")
 
@@ -461,7 +433,7 @@ def detect_object(path: pathlib.Path, text: str) -> Tuple[str, str]:
     # для EDT) — NAME_RES ключуется каноническими, поэтому без резолва алиаса имя
     # оставалось пустым и проверки по имени (длина, дубликаты) для реальных
     # AOS-выгрузок молча не работали.
-    name_re = NAME_RES.get(mnemonic) or NAME_RES.get(_AX_MNEMONIC_ALIASES.get(mnemonic, ""))
+    name_re = name_re_for(mnemonic)
     if name_re:
         for line in lines[:200]:
             m = name_re.match(line)
