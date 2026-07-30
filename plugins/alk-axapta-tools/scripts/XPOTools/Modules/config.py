@@ -40,13 +40,30 @@ import json
 import os
 import pathlib
 
-KEYS = (
+#: Ключи уровня МАШИНЫ: одинаковы для всех задач разработчика.
+MACHINE_KEYS = (
     "AX_PROJECT_ID",
     "AX_USER_NICK",
     "AX_AOT_PATH",
     "AX_OBJECT_PREFIX",
     "AX_OBJECT_SUFFIX",
 )
+
+#: Ключи уровня ЗАДАЧИ: меняются от модификации к модификации, поэтому их место —
+#: .axapta.json рядом с кодом. В машинном ENV они по определению устареют и молча
+#: подставятся в соседнем репозитории, где модификация уже другая.
+#:
+#: Из них собирается мод-маркер целиком:
+#:   //{AX_PROJECT_ID}, {AX_MODIFICATION_ID}, {AX_MODIFICATION_DESC}, {дата}, {AX_USER_NICK}
+#: а AX_AOT_PROJECT даёт имя AOT-проекта для сборки релиза. Вывести его из
+#: AX_PROJECT_ID нельзя: смысловая часть имени и ник произвольные.
+MODIFICATION_KEYS = (
+    "AX_AOT_PROJECT",
+    "AX_MODIFICATION_ID",
+    "AX_MODIFICATION_DESC",
+)
+
+KEYS = MACHINE_KEYS + MODIFICATION_KEYS
 
 # Старые имена (до переименования ALK_* -> AX_*) -> новые. Используется только для
 # реальной миграции config.local.json (см. _migrate_legacy_local_config); HINT-ключ
@@ -162,6 +179,42 @@ def validate_config() -> list[str]:
     return errors
 
 
+def validate_modification() -> list[str]:
+    """Ошибки по ключам уровня ЗАДАЧИ (AX_AOT_PROJECT и параметры маркера).
+
+    Отдельно от validate_config намеренно: без них прекрасно работают чтение
+    и раскладка xpo, а нужны они только там, где ставится мод-маркер или
+    собирается релиз. Делать их глобально обязательными значило бы ломать
+    сценарии, которым они не нужны.
+    """
+    import re
+    placeholder_re = re.compile(r"^<.*>$")
+    cfg = load_config()
+    errors = []
+
+    for k in MODIFICATION_KEYS:
+        v = cfg.get(k, "")
+        if not v or placeholder_re.match(v):
+            errors.append(
+                f"{k} не задан — нужен для мод-маркеров и сборки релиза. "
+                f"Задай в .axapta.json проекта (см. /alk-axapta-tools:setup)."
+            )
+
+    return errors
+
+
+def modification_marker(date_str: str) -> str:
+    """Мод-маркер целиком из конфига. date_str — дата в формате ДД.ММ.ГГГГ.
+
+    Смысл в том, чтобы формат жил в ОДНОМ месте: раньше его собирали руками в
+    каждой сессии, и код проекта успел разъехаться с реальным (в одном
+    репозитории 24 маркера ушли под неверным кодом).
+    """
+    cfg = load_config()
+    return (f"//{cfg['AX_PROJECT_ID']}, {cfg['AX_MODIFICATION_ID']}, "
+            f"{cfg['AX_MODIFICATION_DESC']}, {date_str}, {cfg['AX_USER_NICK']}")
+
+
 def print_config_warnings(warns: list[str]) -> None:
     import sys
     if warns:
@@ -177,8 +230,13 @@ if __name__ == "__main__":
     if project_path:
         print(f"[конфиг проекта] {project_path} (перекрывает ENV)")
 
-    for k in KEYS:
-        print(f"{k} = {cfg[k]!r}")
+    print("[машина]")
+    for k in MACHINE_KEYS:
+        print(f"  {k} = {cfg[k]!r}")
+
+    print("[задача — из .axapta.json]")
+    for k in MODIFICATION_KEYS:
+        print(f"  {k} = {cfg[k]!r}")
 
     errors = validate_config()
     if errors:
@@ -187,5 +245,15 @@ if __name__ == "__main__":
             print(f"  - {e}", file=sys.stderr)
         sys.exit(1)
 
-    print("\n[OK] Все обязательные переменные заданы.")
+    # Ключи задачи не блокируют работу целиком — сообщаем, но не валимся:
+    # чтение и раскладка xpo без них работают.
+    mod_errors = validate_modification()
+    if mod_errors:
+        print("\n[WARN] Не заданы параметры модификации "
+              "(мод-маркеры и сборка релиза работать не будут):", file=sys.stderr)
+        for e in mod_errors:
+            print(f"  - {e}", file=sys.stderr)
+        sys.exit(0)
+
+    print("\n[OK] Все переменные заданы, включая параметры модификации.")
     sys.exit(0)
