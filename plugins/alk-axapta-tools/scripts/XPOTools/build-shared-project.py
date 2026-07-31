@@ -19,7 +19,7 @@ import uuid
 from typing import Dict, List, Tuple
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent / "Modules"))
-from xpo_types import XPO_TYPES, detect_menuitem_subtype  # noqa: E402
+from xpo_types import XPO_TYPES, detect_menuitem_subtype, name_re_for  # noqa: E402
 from config import load_config, validate_config, print_config_warnings  # noqa: E402
 
 if sys.platform == "win32":
@@ -65,44 +65,6 @@ def read_body(path: str) -> str:
 
 ELEMENT_RE = re.compile(r"^\*\*\*Element:\s*(\w+)\s*$")
 
-NAME_RES = {
-    "CLS": re.compile(r"^\s*CLASS\s+#(\S+)"),
-    "TAB": re.compile(r"^\s*TABLE\s+#(\S+)"),
-    "FRM": re.compile(r"^\s*FORM\s+#(\S+)"),
-    "MNU": re.compile(r"^\s*MENU\s+#(\S+)"),
-    "FTM": re.compile(r"^\s*MENUITEM\s+#(\S+)"),
-    # Job не оборачивается в NODE (в отличие от CLASS/TABLE/...) — реальный
-    # экспорт AX 2012 идёт сразу JOBVERSION -> SOURCE #<Name> -> PROPERTIES,
-    # без JOBNODE. У задачи ровно один SOURCE-блок, и это сам джоб.
-    "JOB": re.compile(r"^\s*SOURCE\s+#(\S+)"),
-    "QUE": re.compile(r"^\s*QUERY\s+#(\S+)"),
-    "MAC": re.compile(r"^\s*MACRO\s+#(\S+)"),
-    "EDT": re.compile(r"^\s*EXTENDEDTYPE\s+#(\S+)"),
-    "BAS": re.compile(r"^\s*ENUMTYPE\s+#(\S+)"),
-    "MAP": re.compile(r"^\s*MAP\s+#(\S+)"),
-    "VIE": re.compile(r"^\s*VIEW\s+#(\S+)"),
-    "RES": re.compile(r"^\s*RESOURCENODE\s+#(\S+)"),
-    "LBF": re.compile(r"^\s*LABELFILE\s+#(\S+)"),
-    "SRS": re.compile(r"^\s*SSRSREPORT\s+#(\S+)"),
-    # AX-export mnemonics (соответствуют алиасам в xpo_types._AX_MNEMONIC_ALIASES).
-    "DBT": re.compile(r"^\s*TABLE\s+#(\S+)"),
-    "DBE": re.compile(r"^\s*ENUMTYPE\s+#(\S+)"),
-    "CON": re.compile(r"^\s*CONFIGURATIONKEY\s+#(\S+)"),
-    "UTS": re.compile(r"^\s*USERTYPE\s+#(\S+)"),
-    "UTI": re.compile(r"^\s*USERTYPE\s+#(\S+)"),
-    "UTW": re.compile(r"^\s*USERTYPE\s+#(\S+)"),
-    "UTR": re.compile(r"^\s*USERTYPE\s+#(\S+)"),
-    "UTQ": re.compile(r"^\s*USERTYPE\s+#(\S+)"),
-    "UTE": re.compile(r"^\s*USERTYPE\s+#(\S+)"),
-    "UTU": re.compile(r"^\s*USERTYPE\s+#(\S+)"),
-    "UTG": re.compile(r"^\s*USERTYPE\s+#(\S+)"),
-    "SPV": re.compile(r"^\s*PRIVILEGE\s+#(\S+)"),
-    "SDT": re.compile(r"^\s*DUTY\s+#(\S+)"),
-    "SRO": re.compile(r"^\s*ROLE\s+#(\S+)"),  # AOS Export: ***Element: SRO
-    "SPC": re.compile(r"^\s*PROCESSCYCLE\s+#(\S+)"),
-    "SPO": re.compile(r"^\s*POLICY\s+#(\S+)"),
-    "SCP": re.compile(r"^\s*CODEPERMISSION\s+#(\S+)"),
-}
 
 
 def detect_element_type(lines: List[str]) -> Tuple[str, str]:
@@ -115,7 +77,7 @@ def detect_element_type(lines: List[str]) -> Tuple[str, str]:
     if not mnemonic:
         return ("", "")
     name = ""
-    name_re = NAME_RES.get(mnemonic)
+    name_re = name_re_for(mnemonic)
     if name_re:
         for line in lines[:200]:
             m = name_re.match(line)
