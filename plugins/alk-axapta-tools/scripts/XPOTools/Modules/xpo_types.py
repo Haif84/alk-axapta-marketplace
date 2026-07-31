@@ -26,6 +26,8 @@
 новых типов — добавлять сюда и в SKILL.md одновременно.
 """
 
+import re
+
 XPO_TYPES = {
     "TAB": {"utiltype": 44, "nodetype": 204, "group_path": ["Data Dictionary", "Tables"], "group_type": "Tables", "file_prefix": "Table_"},
     "MAP": {"utiltype": 44, "nodetype": 236, "group_path": ["Data Dictionary", "Maps"], "group_type": "Maps", "file_prefix": "Map_"},
@@ -73,6 +75,9 @@ XPO_TYPES = {
     "PCY": {"utiltype": 136, "nodetype": 1636, "group_path": ["Security", "Process Cycles"], "group_type": "SecurityProcessCycles", "file_prefix": "ProcessCycle_"},
     "POL": {"utiltype": 119, "nodetype": 1619, "group_path": ["Security", "Policies"], "group_type": "SecurityPolicies", "file_prefix": "Policy_"},
     "RES": {"utiltype": 21, "nodetype": 820, "group_path": ["Resources"], "group_type": "Resources", "file_prefix": "Resource_"},
+    # Классический отчёт MorphX — не путать с SRS (отчёт SSRS). В AX 2012 живут
+    # оба, и в выгрузках старых приложений встречается именно RG.
+    "RG": {"utiltype": 18, "nodetype": 202, "group_path": ["Reports"], "group_type": "Reports", "file_prefix": "Report_"},
 }
 
 # Алиасы для реальных AX-mnemonics, которые AOS Export пишет в ***Element:
@@ -91,8 +96,11 @@ _AX_MNEMONIC_ALIASES = {
     "UTR": "EDT",   # EDT Real
     "UTQ": "EDT",   # EDT Container (Queue)
     "UTE": "EDT",   # EDT Enum (Extended Enum)
-    "UTU": "EDT",   # EDT UtcDateTime / Date / Time (встречаются варианты)
+    "UTU": "EDT",   # EDT UtcDateTime
+    "UTD": "EDT",   # EDT Date
+    "UTT": "EDT",   # EDT Time
     "UTG": "EDT",   # EDT Guid
+    "MCR": "MAC",   # Macro (AOS Export пишет MCR, а не MAC)
     "SPV": "PRV",   # Security Privilege
     "SDT": "DUT",   # Security Duty
     "SRO": "ROL",   # Security Role (AOS Export: ***Element: SRO)
@@ -103,6 +111,110 @@ _AX_MNEMONIC_ALIASES = {
 for _alias, _target in _AX_MNEMONIC_ALIASES.items():
     if _target in XPO_TYPES and _alias not in XPO_TYPES:
         XPO_TYPES[_alias] = XPO_TYPES[_target]
+
+
+# Строка объявления, из которой берётся имя объекта, по канонической мнемонике.
+# Ключевое слово в ней зависит от того, ЧЕМ сделана выгрузка: AOT-экспорт AX 2012
+# пишет `USERTYPE #Foo` для EDT и `SOURCE #Foo` для макроса, а сборщик проектов —
+# `EXTENDEDTYPE`/`MACRO`. Поэтому там, где формы расходятся, регексп принимает обе.
+#
+# Таблица одна на все инструменты сознательно: раньше её копии жили в
+# build-shared-project, split_shared_project и validate_xpo, разошлись, и split
+# молча пропускал КАЖДУЮ таблицу, EDT, перечисление и ключ конфигурации —
+# на реальной выгрузке из 555 объектов терялось 256.
+NAME_RES = {
+    "CLS": re.compile(r"^\s*CLASS\s+#(\S+)"),
+    "TAB": re.compile(r"^\s*TABLE\s+#(\S+)"),
+    "FRM": re.compile(r"^\s*FORM\s+#(\S+)"),
+    "MNU": re.compile(r"^\s*MENU\s+#(\S+)"),
+    "FTM": re.compile(r"^\s*MENUITEM\s+#(\S+)"),
+    # Job не оборачивается в NODE (в отличие от CLASS/TABLE/...) — реальный
+    # экспорт AX 2012 идёт сразу JOBVERSION -> SOURCE #<Name> -> PROPERTIES,
+    # без JOBNODE. У задачи ровно один SOURCE-блок, и это сам джоб.
+    "JOB": re.compile(r"^\s*SOURCE\s+#(\S+)"),
+    "QUE": re.compile(r"^\s*QUERY\s+#(\S+)"),
+    "MAC": re.compile(r"^\s*(?:MACRO|SOURCE)\s+#(\S+)"),
+    "EDT": re.compile(r"^\s*(?:EXTENDEDTYPE|USERTYPE)\s+#(\S+)"),
+    "BAS": re.compile(r"^\s*ENUMTYPE\s+#(\S+)"),
+    "CFG": re.compile(r"^\s*CONFIGURATIONKEY\s+#(\S+)"),
+    "LIC": re.compile(r"^\s*LICENSECODE\s+#(\S+)"),
+    "MAP": re.compile(r"^\s*MAP\s+#(\S+)"),
+    "VIE": re.compile(r"^\s*VIEW\s+#(\S+)"),
+    "RES": re.compile(r"^\s*RESOURCENODE\s+#(\S+)"),
+    "LBF": re.compile(r"^\s*LABELFILE\s+#(\S+)"),
+    "SRS": re.compile(r"^\s*SSRSREPORT\s+#(\S+)"),
+    "RG": re.compile(r"^\s*REPORT\s+#(\S+)"),
+    "CDP": re.compile(r"^\s*CODEPERMISSION\s+#(\S+)"),
+    "PRV": re.compile(r"^\s*PRIVILEGE\s+#(\S+)"),
+    "DUT": re.compile(r"^\s*DUTY\s+#(\S+)"),
+    "ROL": re.compile(r"^\s*ROLE\s+#(\S+)"),
+    "PCY": re.compile(r"^\s*PROCESSCYCLE\s+#(\S+)"),
+    "POL": re.compile(r"^\s*POLICY\s+#(\S+)"),
+}
+
+
+#: Подтип пункта меню по числу в строке `Type: N` — те же значения, что UTILTYPE
+#: (1=Display, 2=Output, 3=Action).
+_MENUITEM_SUBTYPE_BY_CODE = {"1": "FTM_DISPLAY", "2": "FTM_OUTPUT", "3": "FTM_ACTION"}
+
+
+def detect_menuitem_subtype_from_lines(lines) -> str:
+    """Подтип MenuItem из тела элемента; пустая строка, если не опознан.
+
+    AOT-экспорт AX пишет подтип числом отдельной строкой сразу за объявлением
+    (`MENUITEM #Foo` / `Type: 1`), сборщик проектов — словом (`Type #Display`).
+    Поддержаны обе формы: раньше каждый инструмент знал только словесную и на
+    реальной выгрузке не опознавал подтип НИКОГДА.
+    """
+    for line in lines:
+        s = line.strip()
+        m = re.match(r"^Type:\s*([123])\b", s)
+        if m:
+            return _MENUITEM_SUBTYPE_BY_CODE[m.group(1)]
+        if s.startswith("Type") and "#" in s:
+            v = s.split("#", 1)[-1].strip().lower()
+            if v in ("display", "output", "action"):
+                return "FTM_" + v.upper()
+    return ""
+
+
+#: Типы объектов, внутри которых кода нет вовсе: ни classDeclaration, ни
+#: _changeDeclaration, ни свойства для документации — мод-маркер поставить
+#: физически некуда. Принадлежность модификации у них фиксируется только
+#: именем и членством в проекте.
+NO_CODE_CONTAINER = {
+    "EDT", "UTS", "UTI", "UTR", "UTE", "UTQ", "UTU", "UTD", "UTT", "UTG", "UTW",
+    "BAS", "DBE", "CFG", "CON", "LIC", "TBC", "PER",
+    "FTM", "FTM_DISPLAY", "FTM_OUTPUT", "FTM_ACTION", "MNU", "RES", "LBF",
+}
+
+
+def name_re_for(mnemonic: str):
+    """Регексп строки объявления по мнемонике из ***Element, с учётом алиасов.
+
+    Мнемоника из реальной выгрузки (DBT, UTS, MCR…) сначала сводится к
+    канонической — иначе объект остаётся без имени и тихо выпадает из обработки.
+
+    Подтипы пунктов меню (FTM_DISPLAY/OUTPUT/ACTION) сводятся к FTM: строка
+    объявления у всех трёх одна — `MENUITEM #Имя`. Без этого detect_object,
+    уточнивший подтип ДО поиска имени, оставлял каждый пункт меню безымянным —
+    и проверки дублей и длины имени для них молча отключались.
+    """
+    if mnemonic.startswith("FTM_"):
+        mnemonic = "FTM"
+    return NAME_RES.get(mnemonic) or NAME_RES.get(_AX_MNEMONIC_ALIASES.get(mnemonic, ""))
+
+
+def find_object_name(mnemonic: str, lines) -> str:
+    """Имя объекта из строк элемента; пустая строка, если не нашлось."""
+    rx = name_re_for(mnemonic)
+    if not rx:
+        return ""
+    for line in lines:
+        m = rx.match(line)
+        if m:
+            return m.group(1)
+    return ""
 
 # Префиксы файлов, для которых маркеры мод-комментариев необязательны.
 # Resource/LabelFile — бинарные/служебные.
