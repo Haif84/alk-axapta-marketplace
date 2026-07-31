@@ -69,6 +69,18 @@ class TestMenuItemSubtype(unittest.TestCase):
         к тому, что все пункты меню оказывались в одной папке."""
         self.assertEqual(detect_menuitem_subtype_from_lines(["  MENUITEM #Foo"]), "")
 
+    def test_subtype_mnemonic_still_resolves_name(self):
+        """Регрессия: detect_object уточняет FTM до FTM_DISPLAY ДО поиска имени.
+
+        Без сведения FTM_* -> FTM в name_re_for каждый пункт меню оставался
+        безымянным — и проверки дублей и длины имени для них молча отключались
+        (ложные дубли «исчезали» через потерю имени, а не через подтипы).
+        """
+        for sub in ("FTM_DISPLAY", "FTM_OUTPUT", "FTM_ACTION"):
+            with self.subTest(sub=sub):
+                self.assertEqual(
+                    find_object_name(sub, ["  MENUITEM #BMBuild"]), "BMBuild")
+
 
 BUNDLE = """Exportfile for AOT version 1.0 or later
 Formatversion: 1

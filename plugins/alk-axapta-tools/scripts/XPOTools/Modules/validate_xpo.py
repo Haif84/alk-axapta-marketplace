@@ -161,6 +161,176 @@ def check_indices_shape(path: pathlib.Path, text: str) -> List[Issue]:
     return issues
 
 
+#: Состояние разбора, переносимое МЕЖДУ строками метода:
+#: (внутри /* */, открытая кавычка или None, литерал verbatim).
+XppScanState = Tuple[bool, Optional[str], bool]
+XPP_SCAN_START: XppScanState = (False, None, False)
+
+
+def xpp_code_only(line: str, state: XppScanState = XPP_SCAN_START) -> Tuple[str, XppScanState]:
+    """Кодовая часть строки X++: без комментариев и без содержимого литералов.
+
+    Литералы вычищаются, а не просто пропускаются: иначе `if (line == '{')`
+    посчитается за открывающую скобку. Комментарий `//` внутри литерала —
+    это данные (`'http://host'`), поэтому наивная обрезка по `//` не годится.
+
+    Состояние ОБЯЗАНО переноситься между строками: в X++ строковый литерал
+    может тянуться через несколько строк (так вставляют XAML и XML), и разбор
+    построчно с чистого листа принимает содержимое литерала за код.
+
+    Возвращает (кодовая часть, новое состояние).
+    """
+    in_block_comment, quote, verbatim = state
+    out: List[str] = []
+    i, n = 0, len(line)
+
+    while i < n:
+        ch = line[i]
+
+        if in_block_comment:
+            if ch == "*" and i + 1 < n and line[i + 1] == "/":
+                in_block_comment = False
+                i += 2
+                continue
+            i += 1
+            continue
+
+        if quote:
+            if ch == "\\" and not verbatim and i + 1 < n:
+                i += 2                      # экранированный символ внутри литерала
+                continue
+            if ch == quote:
+                # В verbatim-литерале кавычка удваивается: @"...""..." —
+                # это данные, а не конец строки.
+                if verbatim and i + 1 < n and line[i + 1] == quote:
+                    i += 2
+                    continue
+                quote = None
+                out.append(" ")             # литерал схлопываем в пробел
+            i += 1
+            continue
+
+        if ch in ("'", '"'):
+            quote = ch
+            verbatim = i > 0 and line[i - 1] == "@"
+            i += 1
+            continue
+
+        if ch == "/" and i + 1 < n and line[i + 1] == "/":
+            break                            # хвостовой комментарий
+
+        if ch == "/" and i + 1 < n and line[i + 1] == "*":
+            in_block_comment = True
+            i += 2
+            continue
+
+        out.append(ch)
+        i += 1
+
+    return "".join(out), (in_block_comment, quote, verbatim)
+
+
+def iter_source_blocks(text: str):
+    """Отдаёт (имя метода, номер строки SOURCE, [(номер, содержимое-после-#)]).
+
+    Строки режем ТОЛЬКО по CRLF. `splitlines()` здесь нельзя: он делит ещё и по
+    одиночному CR, а тот встречается ВНУТРИ исходника как обычный символ —
+    например `case #X:<CR>    this.doIt();` в SitesSvcSyncErrorInfoAction.
+    Для AX это одна строка с префиксом '#', а `splitlines()` показывал вторую,
+    «потерявшую» префикс, и проверка ругалась на совершенно целый файл.
+    """
+    lines = text.split("\r\n") if "\r\n" in text else text.split("\n")
+    name: Optional[str] = None
+    start = 0
+    body: List[Tuple[int, Optional[str]]] = []
+
+    for lineno, line in enumerate(lines, 1):
+        m = re.match(r"^\s*SOURCE #(\S+)", line)
+        if m:
+            name, start, body = m.group(1), lineno, []
+            continue
+        if re.match(r"^\s*ENDSOURCE\b", line):
+            if name is not None:
+                yield name, start, body
+            name = None
+            continue
+        if name is not None:
+            m2 = re.match(r"^\s*#(.*)$", line)
+            body.append((lineno, m2.group(1) if m2 else None))
+
+
+def check_source_prefix(path: pathlib.Path, text: str) -> List[Issue]:
+    """Каждая строка внутри SOURCE обязана начинаться с '#'.
+
+    Ловит порчу, которую не видит ничто другое: скрипт-переписыватель снял
+    префикс, xpo внешне цел (BOM, CRLF, баланс блоков в порядке), а AX такой
+    файл уже не понимает. Проверено на 400 боевых выгрузках: строк без '#'
+    внутри SOURCE не бывает ни одной.
+    """
+    issues: List[Issue] = []
+    for name, _, body in iter_source_blocks(text):
+        bad = [lineno for lineno, content in body if content is None]
+        if bad:
+            issues.append(Issue(
+                str(path), "ERROR",
+                f"line {bad[0]}: в теле SOURCE #{name} строка без префикса '#' "
+                f"(всего таких строк: {len(bad)}). AX не прочитает такой xpo"))
+    return issues
+
+
+def check_xpp_brace_balance(path: pathlib.Path, text: str) -> List[Issue]:
+    """Фигурные скобки внутри метода обязаны сходиться.
+
+    Ловит обрезанный или покорёженный метод — например, когда автоматическая
+    правка исходников вставила скобку не туда. Комментарии и литералы из
+    подсчёта исключены, иначе `'{'` в строке даёт ложную тревогу.
+
+    Границы применимости, обе намеренные:
+
+    1. Парная вставка `{`/`}` не в том месте баланс НЕ нарушает, поэтому такую
+       ошибку проверка не увидит — для неё нужен компилятор AX.
+    2. Методы с ВЛОЖЕННЫМ блочным комментарием (`/*` внутри `/*`) пропускаются.
+       Такое встречается в legacy-коде: закомментировали кусок, внутри которого
+       уже был свой комментарий. Считать скобки текстом там нельзя, не зная
+       точно, вложенные комментарии в X++ или нет, — а выдавать догадку за
+       ошибку хуже, чем промолчать. На боевой выгрузке это ~0.6% классов.
+    """
+    issues: List[Issue] = []
+    for name, start, body in iter_source_blocks(text):
+        balance = 0
+        state = XPP_SCAN_START
+        ambiguous = False
+
+        for _, content in body:
+            if content is None:
+                continue                     # об этом уже сказал check_source_prefix
+
+            if state[0] and "/*" in content:
+                ambiguous = True             # вложенный комментарий — не гадаем
+                break
+
+            code, state = xpp_code_only(content, state)
+
+            # Макрос отдельной строкой может развернуться во что угодно, включая
+            # открывающую скобку: `#ALK_DialogHeader` в CIT_SendAlert.dialog даёт
+            # весь заголовок метода, и в тексте остаётся только `}`.
+            if code.lstrip().startswith("#"):
+                ambiguous = True
+                break
+
+            balance += code.count("{") - code.count("}")
+
+        if ambiguous:
+            continue
+
+        if balance:
+            issues.append(Issue(
+                str(path), "ERROR",
+                f"line {start}: в методе {name} не сходятся фигурные скобки "
+                f"(баланс {balance:+d}) — метод обрезан или повреждён"))
+    return issues
+
+
 def check_form_objectbank(path: pathlib.Path, text: str, mnemonic: str) -> List[Issue]:
     """Блок OBJECTBANK формы БЕЗ источников данных обязан выглядеть так:
 
@@ -555,6 +725,8 @@ def validate_one(
     issues.extend(check_reserved_identifiers(path, text))
     issues.extend(check_object_name_length(path, obj[1]))
     issues.extend(check_form_objectbank(path, text, obj[0]))
+    issues.extend(check_source_prefix(path, text))
+    issues.extend(check_xpp_brace_balance(path, text))
     if root is not None and obj[0]:
         issues.extend(check_layout_consistency(path, root, obj[0], text))
     return issues, obj

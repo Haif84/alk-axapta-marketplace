@@ -194,7 +194,14 @@ def name_re_for(mnemonic: str):
 
     Мнемоника из реальной выгрузки (DBT, UTS, MCR…) сначала сводится к
     канонической — иначе объект остаётся без имени и тихо выпадает из обработки.
+
+    Подтипы пунктов меню (FTM_DISPLAY/OUTPUT/ACTION) сводятся к FTM: строка
+    объявления у всех трёх одна — `MENUITEM #Имя`. Без этого detect_object,
+    уточнивший подтип ДО поиска имени, оставлял каждый пункт меню безымянным —
+    и проверки дублей и длины имени для них молча отключались.
     """
+    if mnemonic.startswith("FTM_"):
+        mnemonic = "FTM"
     return NAME_RES.get(mnemonic) or NAME_RES.get(_AX_MNEMONIC_ALIASES.get(mnemonic, ""))
 
 
