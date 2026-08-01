@@ -80,6 +80,15 @@ class TestChecks(unittest.TestCase):
         self.assertNotIn("blank-before-return",
                          codes("int m()\n{\n    if (a)\n    {\n        return 1;\n    }\n}"))
 
+    def test_macro_element_is_not_a_method(self):
+        """У макроса `SOURCE #Имя` — объявление объекта AOT, а не метода:
+        правила именования методов к нему неприменимы."""
+        macro = ["***Element: MCR",
+                 "      SOURCE #BMScripts_CDT",
+                 "        #    #define.sobs('SO-BS')",
+                 "      ENDSOURCE"]
+        self.assertEqual(check_style(macro, "_CDT"), [])
+
     def test_clean_code_produces_nothing(self):
         body = ("int m(int _qty)\n"
                 "{\n"

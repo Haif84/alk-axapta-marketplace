@@ -98,13 +98,27 @@ def mask_code(lines: List[str]) -> List[Masked]:
     return out
 
 
+#: Элементы, у которых `SOURCE #Имя` — объявление САМОГО ОБЪЕКТА, а не метода.
+#: У макроса внутри `#define`, а не сигнатура, и имя узла — имя объекта AOT,
+#: к которому правила именования методов неприменимы.
+OBJECT_SOURCE_ELEMENTS = {"MCR", "MAC"}
+
+
 def iter_methods(lines: List[str]) -> Iterator[Tuple[str, int, List[str]]]:
     """(имя метода, номер первой строки тела в файле, строки кода без `#`)."""
     start, name = None, ""
+    element = ""
     for i, line in enumerate(lines):
         s = line.strip()
+        m = re.match(r"^\*\*\*Element:\s*(\w+)\s*$", s)
+        if m:
+            element = m.group(1)
+            continue
         m = re.match(r"^SOURCE #(\S+)\s*$", s)
         if m:
+            if element in OBJECT_SOURCE_ELEMENTS:
+                start = None
+                continue
             start, name = i + 1, m.group(1)
             continue
         if s == "ENDSOURCE" and start is not None:
