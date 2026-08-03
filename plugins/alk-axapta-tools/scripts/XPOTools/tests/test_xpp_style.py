@@ -80,6 +80,39 @@ class TestChecks(unittest.TestCase):
         self.assertNotIn("blank-before-return",
                          codes("int m()\n{\n    if (a)\n    {\n        return 1;\n    }\n}"))
 
+    def test_job_name_is_object_name_but_body_is_checked(self):
+        """У JOB `SOURCE #Имя` — имя объекта AOT (экспорт идёт без обёртки-узла,
+        см. NAME_RES в xpo_types): правило именования методов к нему
+        неприменимо. Тело при этом — обычный X++, стилевые проверки работают."""
+        job = ["***Element: JOB",
+               "      SOURCE #BMInitData",
+               "        #static void BMInitData(Args _args)",
+               "        #{",
+               "        #    int a;",
+               "        #    a =1 ;",
+               "        #}",
+               "      ENDSOURCE"]
+        found = check_style(job, "_CDT")
+        self.assertFalse(any("method-name-case" in m for _l, m in found),
+                         "имя джоба не должно флагаться как имя метода")
+        self.assertTrue(any("assign-spacing" in m for _l, m in found),
+                        "стилевые проверки тела джоба должны работать")
+
+    def test_verbatim_literal_does_not_poison_following_code(self):
+        """@'\\Classes\\' — бэкслеш в verbatim-литерале не экранирует кавычку.
+
+        До фикса состояние «в строке» не закрывалось, и весь код ниже
+        маскировался — проверки молча отключались до конца файла."""
+        m = mask_code([r"path = @'\Classes\' + name;", "x = 1;"])
+        self.assertIn("x = 1;", m[1].code)
+        self.assertIn("+ name;", m[0].code)
+
+    def test_verbatim_doubled_quote_is_data(self):
+        """@"...""..." — удвоенная кавычка внутри verbatim это данные."""
+        m = mask_code(['s = @"a""b" + tail;', "y = 2;"])
+        self.assertIn("+ tail;", m[0].code)
+        self.assertIn("y = 2;", m[1].code)
+
     def test_macro_element_is_not_a_method(self):
         """У макроса `SOURCE #Имя` — объявление объекта AOT, а не метода:
         правила именования методов к нему неприменимы."""

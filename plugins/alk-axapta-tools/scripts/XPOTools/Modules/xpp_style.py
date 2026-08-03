@@ -57,6 +57,7 @@ def mask_code(lines: List[str]) -> List[Masked]:
     """
     out = []
     quote = ""
+    verbatim = False
     in_block = False
     for raw in lines:
         code = []
@@ -72,11 +73,21 @@ def mask_code(lines: List[str]) -> List[Masked]:
                 code.append(" ")
                 i += 1
             elif quote:
-                if ch == "\\" and i + 1 < n:
+                # В verbatim-литерале (@'...' / @"...") бэкслеш — данные, а не
+                # экранирование: @'\Classes\' закрывается второй кавычкой, и без
+                # этой ветки состояние «в строке» не закрывалось до конца файла,
+                # молча отключая все проверки ниже (та же семантика, что в
+                # xpp_code_only из validate_xpo).
+                if ch == "\\" and not verbatim and i + 1 < n:
                     code.append("  ")
                     i += 2
                     continue
                 if ch == quote:
+                    # Удвоенная кавычка в verbatim — данные, а не конец литерала.
+                    if verbatim and i + 1 < n and raw[i + 1] == quote:
+                        code.append("  ")
+                        i += 2
+                        continue
                     quote = ""
                 code.append(" ")
                 i += 1
@@ -89,6 +100,7 @@ def mask_code(lines: List[str]) -> List[Masked]:
                 i += 2
             elif ch in "'\"":
                 quote = ch
+                verbatim = i > 0 and raw[i - 1] == "@"
                 code.append(" ")
                 i += 1
             else:
@@ -103,9 +115,15 @@ def mask_code(lines: List[str]) -> List[Masked]:
 #: к которому правила именования методов неприменимы.
 OBJECT_SOURCE_ELEMENTS = {"MCR", "MAC"}
 
+#: Элементы, у которых `SOURCE #Имя` — тоже имя объекта AOT (реальный экспорт
+#: JOB идёт сразу `SOURCE #<ИмяДжоба>`, без обёртки-узла — см. NAME_RES в
+#: xpo_types), но ВНУТРИ обычный X++: правила именования методов к имени узла
+#: неприменимы, а стилевые проверки тела — применимы полностью.
+OBJECT_NAMED_SOURCE_ELEMENTS = {"JOB"}
 
-def iter_methods(lines: List[str]) -> Iterator[Tuple[str, int, List[str]]]:
-    """(имя метода, номер первой строки тела в файле, строки кода без `#`)."""
+
+def iter_methods(lines: List[str]) -> Iterator[Tuple[str, int, List[str], str]]:
+    """(имя метода, номер первой строки тела, строки кода без `#`, элемент)."""
     start, name = None, ""
     element = ""
     for i, line in enumerate(lines):
@@ -126,7 +144,7 @@ def iter_methods(lines: List[str]) -> Iterator[Tuple[str, int, List[str]]]:
             for raw in lines[start:i]:
                 idx = raw.find("#")
                 body.append(raw[idx + 1:] if idx >= 0 else raw)
-            yield name, start, body
+            yield name, start, body, element
             start = None
 
 
@@ -238,11 +256,12 @@ def check_blank_before_return(masked: List[Masked], base: int) -> List[Tuple[int
 def check_style(lines: List[str], affix: str = "") -> List[Tuple[int, str]]:
     """Все стилевые замечания по файлу: [(номер строки в файле, текст)]."""
     found: List[Tuple[int, str]] = []
-    for name, base, body in iter_methods(lines):
+    for name, base, body, element in iter_methods(lines):
         if not body:
             continue
         masked = mask_code(body)
-        found += check_method_name(name, base)
+        if element not in OBJECT_NAMED_SOURCE_ELEMENTS:
+            found += check_method_name(name, base)
         found += check_keyword_case(masked, base)
         found += check_params(masked, base)
         found += check_var_affix(masked, base, affix)
