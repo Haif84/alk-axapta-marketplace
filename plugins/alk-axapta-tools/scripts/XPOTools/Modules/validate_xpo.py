@@ -580,6 +580,17 @@ def check_reserved_identifiers(path: pathlib.Path, text: str) -> List[Issue]:
                     if content_stripped == "" or content_stripped == ";":
                         i += 1
                         continue
+                    # Комментарий и макро-директива блок объявлений НЕ обрывают:
+                    # и то и другое штатно стоит среди объявлений, а сканирование
+                    # прекращается на первой «не-декларации». Из-за этого одна
+                    # строка `// пояснение` прятала все объявления ниже себя, и
+                    # проверка молча пропускала `int from;` в трёх строках под ней.
+                    if (content_stripped.startswith("//")
+                            or content_stripped.startswith("/*")
+                            or content_stripped.startswith("*")
+                            or content_stripped.startswith("#")):
+                        i += 1
+                        continue
                     dm = DECL_RE.match(content)
                     if not dm or dm.group(1).lower() in _STATEMENT_KEYWORDS:
                         # Либо не похоже на объявление, либо это оператор вида
