@@ -546,6 +546,7 @@ def check_reserved_identifiers(path: pathlib.Path, text: str) -> List[Issue]:
             continue
         signature_checked = False
         declarations_open = False
+        in_block_comment = False
         i += 1
         while i < len(lines):
             if lines[i].strip() == "ENDSOURCE":
@@ -579,6 +580,34 @@ def check_reserved_identifiers(path: pathlib.Path, text: str) -> List[Issue]:
                     continue
                 if declarations_open:
                     if content_stripped == "" or content_stripped == ";":
+                        i += 1
+                        continue
+                    # Комментарий и макро-директива блок объявлений НЕ обрывают:
+                    # и то и другое штатно стоит среди объявлений, а сканирование
+                    # прекращается на первой «не-декларации». Из-за этого одна
+                    # строка `// пояснение` прятала все объявления ниже себя, и
+                    # проверка молча пропускала `int from;` в трёх строках под ней.
+                    #
+                    # Блочный /* */ пропускается ЦЕЛИКОМ, с состоянием: строки
+                    # внутри него — в том числе закомментированные объявления
+                    # вида `int from;` (штатная конвенция сохранения заменённого
+                    # кода, §3 mod-comments) — не сканируются вовсе. Без
+                    # состояния закомментированное объявление давало бы ложный
+                    # WARN, а непрефиксованная строка середины комментария
+                    # обрывала бы скан, пряча объявления ниже.
+                    if in_block_comment:
+                        if "*/" in content_stripped:
+                            in_block_comment = False
+                        i += 1
+                        continue
+                    if content_stripped.startswith("/*"):
+                        if "*/" not in content_stripped:
+                            in_block_comment = True
+                        i += 1
+                        continue
+                    if (content_stripped.startswith("//")
+                            or content_stripped.startswith("*")
+                            or content_stripped.startswith("#")):
                         i += 1
                         continue
                     dm = DECL_RE.match(content)
