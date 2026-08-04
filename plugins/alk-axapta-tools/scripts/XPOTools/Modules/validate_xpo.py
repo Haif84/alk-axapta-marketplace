@@ -38,6 +38,7 @@ from xpo_types import (  # noqa: E402
 )
 from config import load_config, validate_config, print_config_warnings  # noqa: E402
 from reserved_words import RESERVED_WORDS  # noqa: E402
+from xpp_style import check_style  # noqa: E402
 
 if sys.platform == "win32":
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
@@ -545,6 +546,7 @@ def check_reserved_identifiers(path: pathlib.Path, text: str) -> List[Issue]:
             continue
         signature_checked = False
         declarations_open = False
+        in_block_comment = False
         i += 1
         while i < len(lines):
             if lines[i].strip() == "ENDSOURCE":
@@ -585,8 +587,25 @@ def check_reserved_identifiers(path: pathlib.Path, text: str) -> List[Issue]:
                     # прекращается на первой «не-декларации». Из-за этого одна
                     # строка `// пояснение` прятала все объявления ниже себя, и
                     # проверка молча пропускала `int from;` в трёх строках под ней.
+                    #
+                    # Блочный /* */ пропускается ЦЕЛИКОМ, с состоянием: строки
+                    # внутри него — в том числе закомментированные объявления
+                    # вида `int from;` (штатная конвенция сохранения заменённого
+                    # кода, §3 mod-comments) — не сканируются вовсе. Без
+                    # состояния закомментированное объявление давало бы ложный
+                    # WARN, а непрефиксованная строка середины комментария
+                    # обрывала бы скан, пряча объявления ниже.
+                    if in_block_comment:
+                        if "*/" in content_stripped:
+                            in_block_comment = False
+                        i += 1
+                        continue
+                    if content_stripped.startswith("/*"):
+                        if "*/" not in content_stripped:
+                            in_block_comment = True
+                        i += 1
+                        continue
                     if (content_stripped.startswith("//")
-                            or content_stripped.startswith("/*")
                             or content_stripped.startswith("*")
                             or content_stripped.startswith("#")):
                         i += 1
@@ -715,9 +734,16 @@ def check_layout_consistency(
     )]
 
 
+def check_xpp_style(path: pathlib.Path, text: str, affix: str) -> List[Issue]:
+    """Оформление X++: регистр ключевых слов, имена, пробелы (см. xpp_style)."""
+    return [Issue(f"{path}:{line}", "WARN", msg)
+            for line, msg in check_style(text.splitlines(), affix)]
+
+
 def validate_one(
     path: pathlib.Path,
     prefix: str,
+    affix: str = "",
     root: Optional[pathlib.Path] = None,
 ) -> Tuple[List[Issue], Tuple[str, str]]:
     issues: List[Issue] = []
@@ -734,6 +760,7 @@ def validate_one(
     issues.extend(check_markers(path, text, prefix, obj[0]))
     issues.extend(check_source_block_wrapping(path, text, prefix))
     issues.extend(check_reserved_identifiers(path, text))
+    issues.extend(check_xpp_style(path, text, affix))
     issues.extend(check_object_name_length(path, obj[1]))
     issues.extend(check_form_objectbank(path, text, obj[0]))
     issues.extend(check_source_prefix(path, text))
@@ -769,13 +796,19 @@ def main() -> int:
     if "<" in prefix:
         prefix = ""
 
+    # Аффикс нужен проверке var-affix: переменная не должна нести аффикс имени
+    # объекта AOT. Плейсхолдер из config.example.json игнорируем.
+    affix = cfg.get("AX_OBJECT_SUFFIX", "") or cfg.get("AX_OBJECT_PREFIX", "") or ""
+    if "<" in affix:
+        affix = ""
+
     all_issues: List[Issue] = []
     name_owners: Dict[Tuple[str, str], List[str]] = {}
 
     layout_root = target if target.is_dir() else None
 
     for f in files:
-        issues, obj = validate_one(f, prefix, root=layout_root)
+        issues, obj = validate_one(f, prefix, affix, root=layout_root)
         all_issues.extend(issues)
         if obj[0] and obj[1]:
             name_owners.setdefault(obj, []).append(str(f))

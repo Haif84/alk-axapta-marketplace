@@ -63,6 +63,21 @@ class ReservedIdentifiers(unittest.TestCase):
         text = method("private void probe()\n{\n    // пояснение\n    int counter;\n    ;\n}")
         self.assertEqual(check_reserved_identifiers(FAKE, text), [])
 
+    def test_commented_out_declaration_is_not_flagged(self):
+        """Заменённый код сохраняется в /* */ по §3 mod-comments — объявление
+        `int from;` внутри блочного комментария не должно давать ложный WARN."""
+        text = method("private void probe()\n{\n    /*\n    int from;\n    */\n"
+                      "    int counter;\n    ;\n}")
+        self.assertEqual(check_reserved_identifiers(FAKE, text), [])
+
+    def test_block_comment_middle_line_does_not_stop_scan(self):
+        """Непрефиксованная строка середины /* */ не обрывает скан: объявление
+        ниже комментария по-прежнему находится."""
+        text = method("private void probe()\n{\n    /* начало\n"
+                      "    просто текст середины\n    */\n    int from;\n    ;\n}")
+        issues = check_reserved_identifiers(FAKE, text)
+        self.assertEqual(len(issues), 1, "объявление ниже /* */ должно находиться")
+
 
 if __name__ == "__main__":
     unittest.main()
