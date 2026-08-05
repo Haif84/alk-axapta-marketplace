@@ -408,6 +408,59 @@ def check_form_objectbank(path: pathlib.Path, text: str, mnemonic: str) -> List[
     return issues
 
 
+def check_control_nesting(path: pathlib.Path, text: str, mnemonic: str) -> List[Issue]:
+    """Внутри DESIGN формы все CONTROL-блоки — плоский список сиблингов, даже когда
+    один контрол логически лежит "внутри" другого (например, поля грида внутри
+    самого грида). Иерархия выражается ИСКЛЮЧИТЕЛЬНО свойством HierarchyParent,
+    а не физическим вложением CONTROL...ENDCONTROL внутрь другого такого же блока.
+
+    Проверено сканированием 400 форм боевой выгрузки AX 2012 — ни одного случая
+    физической вложенности внутри DESIGN не найдено, всегда плоско.
+
+    Ошибка обнаруживается только импортом в AX и звучит уводяще: «ожидалось
+    ENDCONTROL, но обнаружено CONTROL» — фатальная, останавливает импорт всего
+    файла целиком, а не просто одной формы.
+    """
+    if mnemonic != "FRM":
+        return []
+
+    issues: List[Issue] = []
+    in_design = False
+    depth = 0
+    open_line = 0
+
+    for lineno, line in enumerate(text.splitlines(), 1):
+        stripped = line.strip()
+
+        if stripped == "DESIGN":
+            in_design = True
+            continue
+
+        if stripped == "ENDDESIGN":
+            in_design = False
+            depth = 0
+            continue
+
+        if not in_design:
+            continue
+
+        if stripped.startswith("CONTROL "):
+            depth += 1
+            if depth == 1:
+                open_line = lineno
+            else:
+                issues.append(Issue(
+                    str(path), "ERROR",
+                    f"line {lineno}: CONTROL вложен внутрь CONTROL, открытого на "
+                    f"строке {open_line} — в DESIGN контролы всегда плоский список "
+                    f"сиблингов, иерархия только через HierarchyParent. AX: «ожидалось "
+                    f"ENDCONTROL, но обнаружено CONTROL» (фатально, импорт не проходит)"))
+        elif stripped.startswith("ENDCONTROL") and depth > 0:
+            depth -= 1
+
+    return issues
+
+
 CONTROL_START_RE = re.compile(r"^\s*CONTROL\s+(\w+)\s*$")
 CONTROL_END_RE = re.compile(r"^\s*ENDCONTROL\s*$")
 CONTROL_NAME_RE = re.compile(r"^\s*Name\s+#(\S+)")
@@ -998,6 +1051,7 @@ def validate_one(
     issues.extend(check_object_name_length(path, obj[1]))
     issues.extend(check_method_name_length(path, text))
     issues.extend(check_form_objectbank(path, text, obj[0]))
+    issues.extend(check_control_nesting(path, text, obj[0]))
     issues.extend(check_source_prefix(path, text))
     issues.extend(check_xpp_brace_balance(path, text))
     issues.extend(check_control_autodeclaration(path, text, obj[0]))

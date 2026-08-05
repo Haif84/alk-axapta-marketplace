@@ -15,7 +15,7 @@ import unittest
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "Modules"))
 
-from validate_xpo import check_form_objectbank  # noqa: E402
+from validate_xpo import check_control_nesting, check_form_objectbank  # noqa: E402
 
 FAKE = pathlib.Path("MyDialog.xpo")
 
@@ -122,6 +122,120 @@ class TestFormObjectBank(unittest.TestCase):
         """Проверка касается только форм: у класса блока OBJECTBANK нет вовсе."""
         issues = check_form_objectbank(FAKE, form_xpo(EMPTY_BANK), "CLS")
         self.assertEqual(issues, [])
+
+
+def design_xpo(container: str) -> str:
+    """Минимальная форма с подставляемым содержимым DESIGN."""
+    return (
+        "Exportfile for AOT version 1.0 or later\n"
+        "Formatversion: 1\n"
+        "\n"
+        "***Element: FRM\n"
+        "\n"
+        "FRMVERSION 12\n"
+        "\n"
+        "FORM #MyDialog\n"
+        "  PROPERTIES\n"
+        "    Name                #MyDialog\n"
+        "  ENDPROPERTIES\n"
+        "\n"
+        "  METHODS\n"
+        "  ENDMETHODS\n"
+        "\n"
+        "  DESIGN\n"
+        "    CONTAINER\n"
+        f"{container}"
+        "    ENDCONTAINER\n"
+        "  ENDDESIGN\n"
+        "\n"
+        "ENDFORM\n"
+        "\n"
+        "***Element: END\n"
+    )
+
+
+#: Канон — Grid и его поля-столбцы плоские сиблинги, связь только через
+#: HierarchyParent. Снят с боевой выгрузки AX 2012 (сканирование 400 форм).
+FLAT_SIBLINGS = (
+    "      CONTROL GRID\n"
+    "        PROPERTIES\n"
+    "          Name                #Grid\n"
+    "          HierarchyParent     #TabPage\n"
+    "        ENDPROPERTIES\n"
+    "        METHODS\n"
+    "        ENDMETHODS\n"
+    "      ENDCONTROL\n"
+    "\n"
+    "      CONTROL STRINGEDIT\n"
+    "        PROPERTIES\n"
+    "          Name                #Label\n"
+    "          HierarchyParent     #Grid\n"
+    "        ENDPROPERTIES\n"
+    "        METHODS\n"
+    "        ENDMETHODS\n"
+    "      ENDCONTROL\n"
+)
+
+#: AX: «ожидалось ENDCONTROL, но обнаружено CONTROL» — фатально, импорт не проходит.
+NESTED_CONTROL = (
+    "      CONTROL GRID\n"
+    "        PROPERTIES\n"
+    "          Name                #Grid\n"
+    "          HierarchyParent     #TabPage\n"
+    "        ENDPROPERTIES\n"
+    "        METHODS\n"
+    "        ENDMETHODS\n"
+    "\n"
+    "        CONTROL STRINGEDIT\n"
+    "          PROPERTIES\n"
+    "            Name                #Label\n"
+    "            HierarchyParent     #Grid\n"
+    "          ENDPROPERTIES\n"
+    "          METHODS\n"
+    "          ENDMETHODS\n"
+    "        ENDCONTROL\n"
+    "\n"
+    "      ENDCONTROL\n"
+)
+
+
+class TestControlNesting(unittest.TestCase):
+
+    def test_flat_siblings_pass(self):
+        issues = check_control_nesting(FAKE, design_xpo(FLAT_SIBLINGS), "FRM")
+        self.assertEqual(issues, [], "плоские сиблинги с HierarchyParent — канон, не ошибка")
+
+    def test_physically_nested_control_rejected(self):
+        issues = check_control_nesting(FAKE, design_xpo(NESTED_CONTROL), "FRM")
+        self.assertEqual(len(issues), 1)
+        self.assertEqual(issues[0].level, "ERROR")
+        self.assertIn("вложен внутрь CONTROL", issues[0].msg)
+
+    def test_non_form_ignored(self):
+        issues = check_control_nesting(FAKE, design_xpo(NESTED_CONTROL), "CLS")
+        self.assertEqual(issues, [])
+
+    def test_control_keyword_outside_design_ignored(self):
+        """CONTROL #Name в PERMISSIONS — другая, не связанная с DESIGN конструкция
+        (право доступа к конкретному контролу), проверка её не должна касаться."""
+        text = (
+            design_xpo(FLAT_SIBLINGS)
+            .replace("ENDFORM\n", "")
+            + "  PERMISSIONS #Permissions\n"
+            + "    PERMISSIONSET #Read\n"
+            + "      FORM #Controls\n"
+            + "        CONTROL #Grid\n"
+            + "          PROPERTIES\n"
+            + "          ENDPROPERTIES\n"
+            + "        CONTROL #Label\n"
+            + "          PROPERTIES\n"
+            + "          ENDPROPERTIES\n"
+            + "      ENDFORM\n"
+            + "    ENDPERMISSIONSET\n"
+            + "  ENDPERMISSIONS\n"
+            + "ENDFORM\n"
+        )
+        self.assertEqual(check_control_nesting(FAKE, text, "FRM"), [])
 
 
 if __name__ == "__main__":
