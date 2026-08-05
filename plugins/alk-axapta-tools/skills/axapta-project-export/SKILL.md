@@ -316,6 +316,11 @@ Formatversion: 1
 | · Tables | `Tables` | `Tables` |
 | · Maps | `Maps` | `Maps` |
 | · Views | `Views` | `Views` |
+| · Extended Data Types | `Extended Data Types` | `ExtendedDataTypes` |
+| · Base Enums | `Base Enums` | `BaseEnums` |
+| · License Codes | `License Codes` | `LicenseCodes` |
+| · Configuration Keys | `Configuration Keys` | `ConfigurationKeys` |
+| · Table Collections | `Table Collections` | `TableCollections` |
 | Security (контейнер) | `Security` | `Security` |
 | · Privileges | `Privileges` | `SecurityPrivileges` |
 | · Duties | `Duties` | `SecurityDuties` |
@@ -323,6 +328,25 @@ Formatversion: 1
 | · Code Permissions | `Code Permissions` | `SecurityCodePermissions` |
 | · Process Cycles | `Process Cycles` | `SecurityProcessCycles` |
 | · Policies | `Policies` | `SecurityPolicies` |
+| Parts (контейнер) | `Parts` | `Parts` |
+| · Info Parts | `Info Parts` | `InfoParts` |
+| · Form Parts | `Form Parts` | `FormParts` |
+| Visual Studio Projects (контейнер) | `Visual Studio Projects` | `VisualStudioProjects` |
+| · Dynamics AX Model Projects | `Dynamics AX Model Projects` | `DynamicsAXModelProjects` |
+| · C Sharp Projects | `C Sharp Projects` | `CSharpProjects` |
+| Service Groups | `Service Groups` | `ServiceGroups` |
+| Workflow (контейнер) | `Workflow` | `Workflow` |
+| · Workflow Categories | `Workflow Categories` | `WorkflowCategories` |
+| · Automated Tasks | `Automated Tasks` | `AutomatedTasks` |
+| · Workflow Types | `Workflow Types` | `WorkflowTypes` |
+
+`Extended Data Types`/`Base Enums`/`Classes`/`Data Dictionary` подтверждены
+живым кодом ядра (`DMFGenerateEntityTable`, `WorkflowWizardProvider`
+программно ставят `ProjectGroupType` этими значениями). Остальные строки
+таблицы, добавленные вместе с ними, — тот же паттерн (пробел убран,
+CamelCase), но без отдельной проверки на реальном экспорте: если экспорт
+проекта с такой группой когда-то покажет другое значение — поправить сразу
+и здесь, и в `xpo_types.py`/`build-shared-project.py`.
 
 ### 8. Запись BEGINNODE
 

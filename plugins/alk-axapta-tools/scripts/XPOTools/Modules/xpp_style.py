@@ -20,6 +20,12 @@
   assign-spacing      `a =b` или `a = b ;`. У присваивания пробел с обеих
                       сторон, перед точкой с запятой пробела нет.
   blank-before-return `return` вплотную к предыдущему оператору.
+  param-layout        2+ параметра в одной строке, либо перенесённый параметр
+                      без ведущей запятой. Конвенция: один параметр — в строке
+                      с методом; два и более — каждый на своей строке со
+                      смещением в один отступ, запятая уходит в начало
+                      следующей строки (не остаётся хвостом предыдущей) —
+                      тогда в diff видно, какая строка ДОБАВИЛА параметр.
 
 Разбор идёт по коду, а не по тексту: `//` внутри строкового литерала не
 комментарий, и слово в комментарии не идентификатор. См. mask_code().
@@ -206,6 +212,53 @@ def check_params(masked: List[Masked], base: int) -> List[Tuple[int, str]]:
     return out
 
 
+def _count_top_level_commas(s: str) -> int:
+    """Запятые вне вложенных скобок — чтобы значение по умолчанию вида
+    `= SysMCPJSON_CDT::quote(a, b)` не считалось лишним параметром."""
+    depth = 0
+    count = 0
+    for ch in s:
+        if ch in "([{":
+            depth += 1
+        elif ch in ")]}":
+            depth -= 1
+        elif ch == "," and depth == 0:
+            count += 1
+    return count
+
+
+def check_param_layout(masked: List[Masked], base: int) -> List[Tuple[int, str]]:
+    first, last = _signature_span(masked)
+    if first < 0:
+        return []
+    text = " ".join(m.code for m in masked[first:last + 1])
+    if "(" not in text or ")" not in text:
+        return []
+    inner = text[text.find("(") + 1:text.rfind(")")]
+    if not inner.strip():
+        return []
+    if _count_top_level_commas(inner) + 1 < 2:
+        return []
+    if first == last:
+        return [(base + first,
+                 "param-layout: 2+ параметров в одной строке — перенести каждый "
+                 "на свою строку с ведущей запятой")]
+    # Строка объявления либо обрывается ГОЛОЙ '(' — тогда первый параметр
+    # уходит на следующую строку БЕЗ запятой (это не перенос, а начало
+    # списка), либо несёт первый параметр сама — тогда ведущей запятой
+    # требуют уже ВСЕ последующие строки.
+    after_paren = masked[first].code.split("(", 1)[1].strip() \
+        if "(" in masked[first].code else ""
+    start = first + 1 if after_paren else first + 2
+    out = []
+    for i in range(start, last + 1):
+        stripped = masked[i].code.strip()
+        if stripped and not stripped.startswith(","):
+            out.append((base + i,
+                        "param-layout: перенесённый параметр должен начинаться с ','"))
+    return out
+
+
 def check_var_affix(masked: List[Masked], base: int, affix: str) -> List[Tuple[int, str]]:
     if not affix:
         return []
@@ -264,6 +317,7 @@ def check_style(lines: List[str], affix: str = "") -> List[Tuple[int, str]]:
             found += check_method_name(name, base)
         found += check_keyword_case(masked, base)
         found += check_params(masked, base)
+        found += check_param_layout(masked, base)
         found += check_var_affix(masked, base, affix)
         found += check_assign_spacing(masked, base)
         found += check_blank_before_return(masked, base)
