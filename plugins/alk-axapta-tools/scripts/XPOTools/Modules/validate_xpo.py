@@ -534,6 +534,11 @@ def check_invalid_control_properties(path: pathlib.Path, text: str, mnemonic: st
 UNBOUND_STR_PARAM_RE = re.compile(r"^\s*str\s+([A-Za-z_]\w*)\s*(?:=.*)?$")
 UNBOUND_STR_LOCAL_RE = re.compile(r"^\s*str\s+([A-Za-z_]\w*)\s*(?:=.*)?;")
 WHERE_LIKE_RE = re.compile(r"\b(where|like)\b", re.I)
+#: Ключевые слова, с которых начинается query-оператор X++. Err:103 — про
+#: неограниченную строку в выражении query-оператора; `like`/`where` вне его
+#: (обычный `if (x like _mask)`) компилируется нормально и не должен флагаться.
+QUERY_STATEMENT_RE = re.compile(
+    r"\b(select|insert_recordset|update_recordset|delete_from)\b", re.I)
 
 
 def check_unbound_str_in_query(path: pathlib.Path, text: str) -> List[Issue]:
@@ -542,7 +547,9 @@ def check_unbound_str_in_query(path: pathlib.Path, text: str) -> List[Issue]:
     строками в выражении WHERE не допускается») только на компиляции.
     Проверка — на уровне ОДНОГО метода: собирает имена unbound-`str`
     параметров и локальных переменных, затем ищет их внутри условия
-    `where`/`like` (от строки с ключевым словом до ближайшей `;`)."""
+    `where`/`like` — но только когда это условие принадлежит query-оператору
+    (`select`/`insert_recordset`/`update_recordset`/`delete_from`), а не
+    обычному `if`/`while`, где `like` — валидный оператор сравнения строк."""
     issues: List[Issue] = []
     for name, _, body in iter_source_blocks(text):
         codes: List[Tuple[int, str]] = []
@@ -573,21 +580,34 @@ def check_unbound_str_in_query(path: pathlib.Path, text: str) -> List[Issue]:
         if not unbound:
             continue
 
-        in_clause = False
+        # По X++-операторам (от `;` до `;`), не по строкам: where/like значимы
+        # только внутри query-оператора целиком, а не с первого их появления
+        # после произвольного `if`.
+        stmt: List[Tuple[int, str]] = []
+        is_query_stmt = False
         for lineno, code in codes:
-            if WHERE_LIKE_RE.search(code):
-                in_clause = True
-            if in_clause:
-                for uname in unbound:
-                    if re.search(rf"\b{re.escape(uname)}\b", code):
-                        issues.append(Issue(
-                            str(path), "WARN",
-                            f"line {lineno}: SOURCE #{name}: `{uname}` — str без "
-                            f"длины использован в where/like — AX Err:103, "
-                            f"объявить как `str <N> {uname}`",
-                        ))
-                if ";" in code:
-                    in_clause = False
+            stmt.append((lineno, code))
+            if QUERY_STATEMENT_RE.search(code):
+                is_query_stmt = True
+            if ";" not in code:
+                continue
+            if is_query_stmt:
+                in_clause = False
+                for sln, scode in stmt:
+                    if WHERE_LIKE_RE.search(scode):
+                        in_clause = True
+                    if not in_clause:
+                        continue
+                    for uname in unbound:
+                        if re.search(rf"\b{re.escape(uname)}\b", scode):
+                            issues.append(Issue(
+                                str(path), "WARN",
+                                f"line {sln}: SOURCE #{name}: `{uname}` — str без "
+                                f"длины использован в where/like — AX Err:103, "
+                                f"объявить как `str <N> {uname}`",
+                            ))
+            stmt = []
+            is_query_stmt = False
     return issues
 
 

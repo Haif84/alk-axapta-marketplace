@@ -100,6 +100,29 @@ class TestUnboundStrInQuery(unittest.TestCase):
         )
         self.assertEqual(check_unbound_str_in_query(FAKE, text), [])
 
+    def test_like_outside_select_is_not_query_expression(self):
+        """`like` вне query-оператора (обычный `if`) — валидный оператор
+        сравнения строк, компилируется нормально. Err:103 — только про
+        query-выражения (select/insert_recordset/update_recordset/delete_from);
+        флагать здесь unbound-`str` было бы ложным срабатыванием."""
+        text = cls_with_method(
+            "      #boolean probe(str _mask)\n"
+            "      #{\n"
+            "      #    str name;\n"
+            "      #    ;\n"
+            "      #\n"
+            "      #    name = 'abc';\n"
+            "      #\n"
+            "      #    if (name like _mask)\n"
+            "      #    {\n"
+            "      #        return true;\n"
+            "      #    }\n"
+            "      #\n"
+            "      #    return false;\n"
+            "      #}\n"
+        )
+        self.assertEqual(check_unbound_str_in_query(FAKE, text), [])
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

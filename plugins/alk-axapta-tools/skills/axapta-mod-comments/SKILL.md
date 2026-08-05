@@ -676,7 +676,10 @@ SysMCPJson_CDT
 
 Один параметр — в строке с именем метода. Два и более — каждый на своей строке
 со смещением ровно в **один отступ** от метода; типы, имена и `=` идут по
-столбцам, закрывающая скобка остаётся при последнем параметре:
+столбцам, закрывающая скобка остаётся при последнем параметре. Запятая —
+**ведущая**, в начале строки следующего параметра, а не хвостом предыдущей:
+тогда в diff видно, какая строка ДОБАВИЛА параметр, а не редактирует соседнюю
+(проверяется автоматически, см. `param-layout` в `validate-xpo`):
 
 ```xpp
 // один параметр
@@ -684,10 +687,10 @@ str getValue(int _valueIndex = valueIndex)
 
 // два и более
 void selectRandom(
-    Integer         _qtyNum,
-    Integer         _minVal         = 1,
-    Integer         _maxVal         = 99999999,
-    RandomModel_CDT _randomModel    = RandomModel_CDT::FullRandom)
+    Integer         _qtyNum
+  , Integer         _minVal         = 1
+  , Integer         _maxVal         = 99999999
+  , RandomModel_CDT _randomModel    = RandomModel_CDT::FullRandom)
 ```
 
 Выравнивание под открывающую скобку **не используется**: у метода с длинным
