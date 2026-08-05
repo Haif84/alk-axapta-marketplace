@@ -10,7 +10,7 @@
       "name": "alk-axapta-tools",
       "source": "./plugins/alk-axapta-tools",
       "description": "Скиллы setup, mod-comments (объект текущей мод), project-export/manage, axapta-xpo-helper + XPOTools.",
-      "version": "1.6.12",
+      "version": "1.6.13",
       "author": {
         "name": "ALK Development Team"
       }
