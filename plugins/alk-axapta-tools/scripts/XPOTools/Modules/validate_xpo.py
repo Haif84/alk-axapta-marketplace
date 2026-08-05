@@ -51,7 +51,7 @@ from xpo_types import (  # noqa: E402
 )
 from config import load_config, validate_config, print_config_warnings  # noqa: E402
 from reserved_words import RESERVED_WORDS  # noqa: E402
-from xpp_style import check_style  # noqa: E402
+from xpp_style import OBJECT_NAMED_SOURCE_ELEMENTS, check_style, iter_methods  # noqa: E402
 
 if sys.platform == "win32":
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
@@ -628,6 +628,24 @@ def check_object_name_length(path: pathlib.Path, name: str) -> List[Issue]:
         f"Сократи самые длинные слова с сохранением смысла")]
 
 
+def check_method_name_length(path: pathlib.Path, text: str) -> List[Issue]:
+    """Тот же предел 40 символов действует и на имена методов — оба хранятся
+    в одном поле UtilElements.Name. Обнаружено 04.08.2026 на живом компиляторе
+    (Err:110 «Слишком длинное имя») на методах, которые validate-xpo пропустил:
+    он проверял только имена AOT-объектов, не методов внутри."""
+    issues: List[Issue] = []
+    for name, line, _body, element in iter_methods(text.splitlines()):
+        if element in OBJECT_NAMED_SOURCE_ELEMENTS:
+            continue  # SOURCE #Имя тут — имя объекта (JOB), уже покрыто check_object_name_length
+        if len(name) <= MAX_OBJECT_NAME_LEN:
+            continue
+        issues.append(Issue(
+            f"{path}:{line}", "ERROR",
+            f"имя метода {name!r} — {len(name)} символов, предел {MAX_OBJECT_NAME_LEN}. "
+            f"Сократи самые длинные слова с сохранением смысла"))
+    return issues
+
+
 def check_markers(path: pathlib.Path, text: str, prefix: str,
                   mnemonic: str = "") -> List[Issue]:
     if not prefix:
@@ -978,6 +996,7 @@ def validate_one(
     issues.extend(check_reserved_identifiers(path, text))
     issues.extend(check_xpp_style(path, text, affix))
     issues.extend(check_object_name_length(path, obj[1]))
+    issues.extend(check_method_name_length(path, text))
     issues.extend(check_form_objectbank(path, text, obj[0]))
     issues.extend(check_source_prefix(path, text))
     issues.extend(check_xpp_brace_balance(path, text))

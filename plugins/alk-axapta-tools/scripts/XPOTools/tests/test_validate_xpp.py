@@ -16,6 +16,8 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "Modules"))
 
 from validate_xpo import (  # noqa: E402
+    check_method_name_length,
+    check_object_name_length,
     check_source_prefix,
     check_xpp_brace_balance,
     xpp_code_only,
@@ -172,6 +174,63 @@ class TestCodeOnly(unittest.TestCase):
         code, _ = xpp_code_only("return;   // штатная ситуация")
         self.assertTrue(code.rstrip().endswith(";"))
         self.assertNotIn("штатная", code)
+
+
+class TestNameLength(unittest.TestCase):
+    """Предел 40 символов (EDT SysUtilElementName) — общий для имён объектов
+    и методов, оба хранятся в UtilElements.Name. Найдено 04.08.2026 на живом
+    компиляторе (Err:110) на методах, которые validate-xpo раньше пропускал."""
+
+    def test_object_name_within_limit_is_clean(self):
+        self.assertEqual(check_object_name_length(FAKE, "A" * 40), [])
+
+    def test_object_name_over_limit_is_error(self):
+        issues = check_object_name_length(FAKE, "A" * 41)
+        self.assertEqual(len(issues), 1)
+        self.assertEqual(issues[0].level, "ERROR")
+        self.assertIn("41", issues[0].msg)
+
+    @staticmethod
+    def _method_xpo(method_name: str) -> str:
+        """Класс с одним методом по имени SOURCE #<method_name> — то самое имя,
+        которое AX хранит в UtilElements.Name (не сигнатура внутри тела)."""
+        return (
+            "***Element: CLS\n"
+            "  CLASS #MyClass\n"
+            "    METHODS\n"
+            f"      SOURCE #{method_name}\n"
+            f"        #void {method_name}()\n"
+            "        #{\n"
+            "        #}\n"
+            "      ENDSOURCE\n"
+            "    ENDMETHODS\n"
+            "  ENDCLASS\n"
+        )
+
+    def test_method_name_within_limit_is_clean(self):
+        text = self._method_xpo("a" * 40)
+        self.assertEqual(check_method_name_length(FAKE, text), [])
+
+    def test_method_name_over_limit_is_error(self):
+        long_name = "a" * 41
+        issues = check_method_name_length(FAKE, self._method_xpo(long_name))
+        self.assertEqual(len(issues), 1)
+        self.assertEqual(issues[0].level, "ERROR")
+        self.assertIn(long_name, issues[0].msg)
+
+    def test_job_source_name_is_not_double_reported(self):
+        """SOURCE #<ИмяДжоба> в ***Element: JOB — это имя объекта, не метода:
+        его покрывает check_object_name_length, здесь дублировать не нужно."""
+        long_name = "a" * 41
+        text = (
+            "***Element: JOB\n"
+            f"      SOURCE #{long_name}\n"
+            f"        #void {long_name}()\n"
+            "        #{\n"
+            "        #}\n"
+            "      ENDSOURCE\n"
+        )
+        self.assertEqual(check_method_name_length(FAKE, text), [])
 
 
 if __name__ == "__main__":
