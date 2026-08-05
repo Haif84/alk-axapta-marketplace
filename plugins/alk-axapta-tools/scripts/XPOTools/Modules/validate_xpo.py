@@ -17,6 +17,19 @@
      проверяются. Локальные переменные детектируются только в начале тела
      метода (блок объявлений сразу после `{`, до первого исполняемого
      оператора) — не цепляет обычные операторы вида `return foo;`.
+  8. Контрол формы без `AutoDeclaration #Yes`, на который тем не менее есть
+     ссылка по имени (`Имя.метод(...)`) в коде формы — WARN. AX даёт
+     Err:9 «Переменная ... не была объявлена» только на импорте/компиляции;
+     эта проверка ловит его раньше, статически.
+  9. `str` без объявленной длины (параметр метода или локальная переменная),
+     использованный внутри `where`/`like` `select`-выражения — WARN. AX даёт
+     Err:103 «Использование контейнеров и полей с неограниченными строками
+     в выражении WHERE не допускается» только при компиляции.
+  10. Свойство контрола, ЗАВЕДОМО не существующее для его типа (база знаний —
+      Modules/xpo_types.py:INVALID_CONTROL_PROPERTIES) — WARN. Импорт AX
+      такое свойство не отклоняет, а молча пропускает («пропускается
+      свойство X»), из-за чего расхождение не видно до проверки поведения
+      формы вручную.
 
 Запуск:
     python -m Modules.validate_xpo <file_or_dir> [--strict]
@@ -34,7 +47,7 @@ from typing import Dict, List, Optional, Tuple
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from xpo_types import (  # noqa: E402
     XPO_TYPES, NO_MARKER_REQUIRED, NO_CODE_CONTAINER, dir_path_for, name_re_for,
-    detect_menuitem_subtype_from_lines,
+    detect_menuitem_subtype_from_lines, INVALID_CONTROL_PROPERTIES,
 )
 from config import load_config, validate_config, print_config_warnings  # noqa: E402
 from reserved_words import RESERVED_WORDS  # noqa: E402
@@ -448,6 +461,209 @@ def check_control_nesting(path: pathlib.Path, text: str, mnemonic: str) -> List[
     return issues
 
 
+CONTROL_START_RE = re.compile(r"^\s*CONTROL\s+(\w+)\s*$")
+CONTROL_END_RE = re.compile(r"^\s*ENDCONTROL\s*$")
+CONTROL_NAME_RE = re.compile(r"^\s*Name\s+#(\S+)")
+CONTROL_AUTODECL_RE = re.compile(r"^\s*AutoDeclaration\s+#Yes\b")
+
+#: Контролы, оборачивающие ВНЕШНИЙ объект (WPF/.NET-контрол, ActiveX,
+#: HTML-движок) — обращение к ним по имени (`ManagedHost.control()`,
+#: `HtmlView.Document()`, `html.setText(...)`) работает даже БЕЗ
+#: `AutoDeclaration #Yes`. Проверено на боевых формах в реальном AOT:
+#: `ALK_MarkLabelItem` (MANAGEDHOST `PictureBox`, без AutoDeclaration,
+#: `PictureBox.control()` в коде), `ALK_FilePreview` (ACTIVEX `HtmlView`,
+#: без AutoDeclaration, `HtmlView.Document()`), `SysImportDialog` (HTML
+#: `#HTML`, без AutoDeclaration, `html.setText(...)`). Для ОБЫЧНЫХ контролов
+#: (GROUP/TREE/STRINGEDIT/...) AutoDeclaration обязателен — см. живой пример
+#: Err:9 на GROUP-контроле без него.
+IMPLICITLY_DECLARED_CONTROL_TYPES = {"MANAGEDHOST", "ACTIVEX", "HTML"}
+
+
+def _iter_form_controls(lines: List[str]):
+    """(имя контрола, тип, есть ли AutoDeclaration #Yes) по каждому CONTROL-блоку.
+
+    Контролы формы — плоские соседи внутри CONTAINER (связь между ними —
+    свойство HierarchyParent, а не физическая вложенность блоков в xpo),
+    поэтому парный поиск CONTROL/ENDCONTROL без стека вложенности корректен."""
+    i, n = 0, len(lines)
+    while i < n:
+        cm = CONTROL_START_RE.match(lines[i])
+        if cm:
+            ctype = cm.group(1).upper()
+            i += 1
+            name, auto = None, False
+            while i < n and not CONTROL_END_RE.match(lines[i]):
+                if name is None:
+                    m = CONTROL_NAME_RE.match(lines[i])
+                    if m:
+                        name = m.group(1)
+                if CONTROL_AUTODECL_RE.match(lines[i]):
+                    auto = True
+                i += 1
+            if name:
+                yield name, ctype, auto
+        i += 1
+
+
+def check_control_autodeclaration(path: pathlib.Path, text: str, mnemonic: str) -> List[Issue]:
+    """Контрол без `AutoDeclaration #Yes` не существует как переменная в коде
+    формы — обращение к нему по имени (`objectsTree.setImagelist(...)`) даёт
+    на импорте/компиляции Err:9 «Переменная ... не была объявлена». Ошибка
+    видна только в живом AX; здесь она ловится статически, по совпадению
+    имени контрола с идентификатором перед `.` в коде любого SOURCE-блока
+    файла (уровня формы или уровня самого контрола). Контролы из
+    IMPLICITLY_DECLARED_CONTROL_TYPES исключены — см. её комментарий."""
+    if mnemonic != "FRM":
+        return []
+    lines = text.splitlines()
+    controls = list(_iter_form_controls(lines))
+    if not controls:
+        return []
+    undeclared = {name for name, ctype, auto in controls
+                  if not auto and ctype not in IMPLICITLY_DECLARED_CONTROL_TYPES}
+    if not undeclared:
+        return []
+    used = set()
+    for _, _, body in iter_source_blocks(text):
+        state = XPP_SCAN_START
+        for _, content in body:
+            if content is None:
+                continue
+            code, state = xpp_code_only(content, state)
+            for m in re.finditer(r"\b([A-Za-z_]\w*)\s*\.", code):
+                used.add(m.group(1))
+    issues = []
+    for name in sorted(undeclared & used):
+        issues.append(Issue(
+            str(path), "WARN",
+            f"control `{name}` used in code (`{name}.…`) but has no "
+            f"AutoDeclaration #Yes — AX: 'Переменная {name} не была объявлена' (Err:9)",
+        ))
+    return issues
+
+
+CONTROL_PROP_LINE_RE = re.compile(r"^\s*([A-Za-z_]\w*)\s+#")
+
+
+def check_invalid_control_properties(path: pathlib.Path, text: str, mnemonic: str) -> List[Issue]:
+    """Свойство контрола, заведомо не существующее для его типа — см. базу
+    знаний `INVALID_CONTROL_PROPERTIES` в xpo_types.py. AX импорт такое
+    свойство молча пропускает (`[WARN] пропускается свойство X`, не ERROR),
+    поэтому расхождение не видно до ручной проверки поведения формы."""
+    if mnemonic != "FRM" or not INVALID_CONTROL_PROPERTIES:
+        return []
+    lines = text.splitlines()
+    issues: List[Issue] = []
+    i, n = 0, len(lines)
+    while i < n:
+        cm = CONTROL_START_RE.match(lines[i])
+        if cm:
+            ctype = cm.group(1).upper()
+            i += 1
+            in_props = False
+            while i < n and not CONTROL_END_RE.match(lines[i]):
+                stripped = lines[i].strip()
+                if stripped == "PROPERTIES":
+                    in_props = True
+                elif stripped == "ENDPROPERTIES":
+                    in_props = False
+                elif in_props:
+                    pm = CONTROL_PROP_LINE_RE.match(lines[i])
+                    if pm:
+                        reason = INVALID_CONTROL_PROPERTIES.get((ctype, pm.group(1)))
+                        if reason:
+                            issues.append(Issue(
+                                str(path), "WARN",
+                                f"line {i + 1}: свойство `{pm.group(1)}` недопустимо "
+                                f"на CONTROL {ctype} — {reason}",
+                            ))
+                i += 1
+        i += 1
+    return issues
+
+
+#: `str`-параметр/локальная без длины — только имя, без цифры вслед за `str`
+#: (для параметра допускается хвостовое значение по умолчанию `= ...`).
+UNBOUND_STR_PARAM_RE = re.compile(r"^\s*str\s+([A-Za-z_]\w*)\s*(?:=.*)?$")
+UNBOUND_STR_LOCAL_RE = re.compile(r"^\s*str\s+([A-Za-z_]\w*)\s*(?:=.*)?;")
+WHERE_LIKE_RE = re.compile(r"\b(where|like)\b", re.I)
+#: Ключевые слова, с которых начинается query-оператор X++. Err:103 — про
+#: неограниченную строку в выражении query-оператора; `like`/`where` вне его
+#: (обычный `if (x like _mask)`) компилируется нормально и не должен флагаться.
+QUERY_STATEMENT_RE = re.compile(
+    r"\b(select|insert_recordset|update_recordset|delete_from)\b", re.I)
+
+
+def check_unbound_str_in_query(path: pathlib.Path, text: str) -> List[Issue]:
+    """`str` без объявленной длины, попавший в `where`/`like` `select`-запроса,
+    даёт Err:103 («Использование контейнеров и полей с неограниченными
+    строками в выражении WHERE не допускается») только на компиляции.
+    Проверка — на уровне ОДНОГО метода: собирает имена unbound-`str`
+    параметров и локальных переменных, затем ищет их внутри условия
+    `where`/`like` — но только когда это условие принадлежит query-оператору
+    (`select`/`insert_recordset`/`update_recordset`/`delete_from`), а не
+    обычному `if`/`while`, где `like` — валидный оператор сравнения строк."""
+    issues: List[Issue] = []
+    for name, _, body in iter_source_blocks(text):
+        codes: List[Tuple[int, str]] = []
+        state = XPP_SCAN_START
+        for lineno, content in body:
+            if content is None:
+                codes.append((lineno, ""))
+                continue
+            code, state = xpp_code_only(content, state)
+            codes.append((lineno, code))
+
+        unbound = set()
+        sig_text = ""
+        for _, code in codes:
+            sig_text += " " + code
+            if "{" in code:
+                break
+        sm = re.search(r"\(([^)]*)\)", sig_text)
+        if sm:
+            for part in sm.group(1).split(","):
+                pm = UNBOUND_STR_PARAM_RE.match(part.strip())
+                if pm:
+                    unbound.add(pm.group(1))
+        for _, code in codes:
+            lm = UNBOUND_STR_LOCAL_RE.match(code)
+            if lm:
+                unbound.add(lm.group(1))
+        if not unbound:
+            continue
+
+        # По X++-операторам (от `;` до `;`), не по строкам: where/like значимы
+        # только внутри query-оператора целиком, а не с первого их появления
+        # после произвольного `if`.
+        stmt: List[Tuple[int, str]] = []
+        is_query_stmt = False
+        for lineno, code in codes:
+            stmt.append((lineno, code))
+            if QUERY_STATEMENT_RE.search(code):
+                is_query_stmt = True
+            if ";" not in code:
+                continue
+            if is_query_stmt:
+                in_clause = False
+                for sln, scode in stmt:
+                    if WHERE_LIKE_RE.search(scode):
+                        in_clause = True
+                    if not in_clause:
+                        continue
+                    for uname in unbound:
+                        if re.search(rf"\b{re.escape(uname)}\b", scode):
+                            issues.append(Issue(
+                                str(path), "WARN",
+                                f"line {sln}: SOURCE #{name}: `{uname}` — str без "
+                                f"длины использован в where/like — AX Err:103, "
+                                f"объявить как `str <N> {uname}`",
+                            ))
+            stmt = []
+            is_query_stmt = False
+    return issues
+
+
 #: Предел длины имени AOT-объекта в AX 2012 — EDT SysUtilElementName это STRING(40).
 MAX_OBJECT_NAME_LEN = 40
 
@@ -838,6 +1054,9 @@ def validate_one(
     issues.extend(check_control_nesting(path, text, obj[0]))
     issues.extend(check_source_prefix(path, text))
     issues.extend(check_xpp_brace_balance(path, text))
+    issues.extend(check_control_autodeclaration(path, text, obj[0]))
+    issues.extend(check_unbound_str_in_query(path, text))
+    issues.extend(check_invalid_control_properties(path, text, obj[0]))
     if root is not None and obj[0]:
         issues.extend(check_layout_consistency(path, root, obj[0], text))
     return issues, obj

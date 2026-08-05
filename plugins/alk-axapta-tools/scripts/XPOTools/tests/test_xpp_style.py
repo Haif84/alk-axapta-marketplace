@@ -62,6 +62,24 @@ class TestChecks(unittest.TestCase):
     def test_param_with_underscore_is_fine(self):
         self.assertNotIn("param-underscore", codes("void m(int _qtyNum)\n{\n}"))
 
+    def test_param_layout_two_params_one_line_flagged(self):
+        self.assertIn("param-layout", codes("void m(int _a, int _b)\n{\n}"))
+
+    def test_param_layout_multiline_leading_comma_is_fine(self):
+        self.assertNotIn("param-layout",
+                         codes("void m(\n      int _a\n    , int _b)\n{\n}"))
+
+    def test_param_layout_multiline_trailing_comma_flagged(self):
+        self.assertIn("param-layout",
+                      codes("void m(\n    int _a,\n    int _b)\n{\n}"))
+
+    def test_param_layout_single_param_is_fine(self):
+        self.assertNotIn("param-layout", codes("void m(int _a)\n{\n}"))
+
+    def test_param_layout_default_value_comma_not_miscounted(self):
+        """Запятая внутри вызова в значении по умолчанию — не второй параметр."""
+        self.assertNotIn("param-layout", codes("void m(str _a = f(1, 2))\n{\n}"))
+
     def test_variable_carrying_object_affix(self):
         self.assertIn("var-affix", codes("void m()\n{\n    BMSetup_CDT BMSetup_CDT;\n}"))
 

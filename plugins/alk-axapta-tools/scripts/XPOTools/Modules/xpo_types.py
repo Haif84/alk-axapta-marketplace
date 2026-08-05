@@ -32,25 +32,25 @@ XPO_TYPES = {
     "TAB": {"utiltype": 44, "nodetype": 204, "group_path": ["Data Dictionary", "Tables"], "group_type": "Tables", "file_prefix": "Table_"},
     "MAP": {"utiltype": 44, "nodetype": 236, "group_path": ["Data Dictionary", "Maps"], "group_type": "Maps", "file_prefix": "Map_"},
     "VIE": {"utiltype": 44, "nodetype": 243, "group_path": ["Data Dictionary", "Views"], "group_type": "Views", "file_prefix": "View_"},
-    "EDT": {"utiltype": 41, "nodetype": 228, "group_path": ["Data Dictionary", "Extended Data Types"], "group_type": "Extended Data Types", "file_prefix": "EDT_"},
-    "BAS": {"utiltype": 40, "nodetype": 209, "group_path": ["Data Dictionary", "Base Enums"], "group_type": "Base Enums", "file_prefix": "BaseEnum_"},
-    "LIC": {"utiltype": 15, "nodetype": 311, "group_path": ["Data Dictionary", "License Codes"], "group_type": "License Codes", "file_prefix": "LicenseCode_"},
-    "CFG": {"utiltype": 35, "nodetype": 312, "group_path": ["Data Dictionary", "Configuration Keys"], "group_type": "Configuration Keys", "file_prefix": "ConfigurationKey_"},
-    "TBC": {"utiltype": 48, "nodetype": 211, "group_path": ["Data Dictionary", "Table Collections"], "group_type": "Table Collections", "file_prefix": "TableCollection_"},
+    "EDT": {"utiltype": 41, "nodetype": 228, "group_path": ["Data Dictionary", "Extended Data Types"], "group_type": "ExtendedDataTypes", "file_prefix": "EDT_"},
+    "BAS": {"utiltype": 40, "nodetype": 209, "group_path": ["Data Dictionary", "Base Enums"], "group_type": "BaseEnums", "file_prefix": "BaseEnum_"},
+    "LIC": {"utiltype": 15, "nodetype": 311, "group_path": ["Data Dictionary", "License Codes"], "group_type": "LicenseCodes", "file_prefix": "LicenseCode_"},
+    "CFG": {"utiltype": 35, "nodetype": 312, "group_path": ["Data Dictionary", "Configuration Keys"], "group_type": "ConfigurationKeys", "file_prefix": "ConfigurationKey_"},
+    "TBC": {"utiltype": 48, "nodetype": 211, "group_path": ["Data Dictionary", "Table Collections"], "group_type": "TableCollections", "file_prefix": "TableCollection_"},
     "PER": {"utiltype": 66, "nodetype": 1311, "group_path": ["Data Dictionary", "Perspectives"], "group_type": "Perspectives", "file_prefix": "Perspective_"},
     "MAC": {"utiltype": 4, "nodetype": 218, "group_path": ["Macros"], "group_type": "Macros", "file_prefix": "Macro_"},
     "CLS": {"utiltype": 45, "nodetype": 329, "group_path": ["Classes"], "group_type": "Classes", "file_prefix": "Class_"},
     "FRM": {"utiltype": 11, "nodetype": 201, "group_path": ["Forms"], "group_type": "Forms", "file_prefix": "Form_"},
     "REF": {"utiltype": 53, "nodetype": 822, "group_path": ["References"], "group_type": "References", "file_prefix": "Reference_"},
     "DTS": {"utiltype": 72, "nodetype": 207, "group_path": ["DataSets"], "dir_path": ("Data Sets",), "group_type": "DataSets", "file_prefix": "DataSet_"},
-    "INP": {"utiltype": 81, "nodetype": 1429, "group_path": ["Parts", "Info Parts"], "group_type": "Info Parts", "file_prefix": "InfoPart_"},
-    "FRP": {"utiltype": 82, "nodetype": 1431, "group_path": ["Parts", "Form Parts"], "group_type": "Form Parts", "file_prefix": "FormPart_"},
+    "INP": {"utiltype": 81, "nodetype": 1429, "group_path": ["Parts", "Info Parts"], "group_type": "InfoParts", "file_prefix": "InfoPart_"},
+    "FRP": {"utiltype": 82, "nodetype": 1431, "group_path": ["Parts", "Form Parts"], "group_type": "FormParts", "file_prefix": "FormPart_"},
     "CUE": {"utiltype": 98, "nodetype": 1543, "group_path": ["Parts", "Cues"], "group_type": "Cues", "file_prefix": "Cue_"},
     "CUG": {"utiltype": 99, "nodetype": 1544, "group_path": ["Parts", "CueGroups"], "group_type": "CueGroups", "file_prefix": "CueGroup_"},
     "SRS": {"utiltype": 85, "nodetype": 1439, "group_path": ["SSRS Reports", "Reports"], "group_type": "Reports", "file_prefix": "SSRSReport_"},
     "LBF": {"utiltype": 117, "nodetype": 831, "group_path": ["LabelFiles"], "group_type": "LabelFiles", "file_prefix": "LabelFile_"},
-    "VSP": {"utiltype": 127, "nodetype": 1531, "group_path": ["Visual Studio Projects", "Dynamics AX Model Projects"], "group_type": "Dynamics AX Model Projects", "file_prefix": "VSProject_"},
-    "CSP": {"utiltype": 128, "nodetype": 1531, "group_path": ["Visual Studio Projects", "C Sharp Projects"], "group_type": "C Sharp Projects", "file_prefix": "CSProject_"},
+    "VSP": {"utiltype": 127, "nodetype": 1531, "group_path": ["Visual Studio Projects", "Dynamics AX Model Projects"], "group_type": "DynamicsAXModelProjects", "file_prefix": "VSProject_"},
+    "CSP": {"utiltype": 128, "nodetype": 1531, "group_path": ["Visual Studio Projects", "C Sharp Projects"], "group_type": "CSharpProjects", "file_prefix": "CSProject_"},
     "QUE": {"utiltype": 20, "nodetype": 330, "group_path": ["Queries"], "group_type": "Queries", "file_prefix": "Query_"},
     "JOB": {"utiltype": 5, "nodetype": 215, "group_path": ["Jobs"], "group_type": "Jobs", "file_prefix": "Job_"},
     "MNU": {"utiltype": 16, "nodetype": 205, "group_path": ["Menus"], "group_type": "Menus", "file_prefix": "Menu_"},
@@ -61,12 +61,12 @@ XPO_TYPES = {
     "FTM_OUTPUT": {"utiltype": 2, "nodetype": 296, "group_path": ["MenuItems", "Output"], "dir_path": ("Menu Items", "Output"), "group_type": "Output", "file_prefix": "MenuItemOutput_"},
     "FTM_ACTION": {"utiltype": 3, "nodetype": 296, "group_path": ["MenuItems", "Action"], "dir_path": ("Menu Items", "Action"), "group_type": "Action", "file_prefix": "MenuItemAction_"},
     "SVC": {"utiltype": 76, "nodetype": 1321, "group_path": ["Services"], "group_type": "Services", "file_prefix": "Service_"},
-    "SVG": {"utiltype": 137, "nodetype": 1325, "group_path": ["Service Groups"], "group_type": "Service Groups", "file_prefix": "ServiceGroup_"},
-    "WFC": {"utiltype": 71, "nodetype": 1423, "group_path": ["Workflow", "Workflow Categories"], "group_type": "Workflow Categories", "file_prefix": "WorkflowCategory_"},
+    "SVG": {"utiltype": 137, "nodetype": 1325, "group_path": ["Service Groups"], "group_type": "ServiceGroups", "file_prefix": "ServiceGroup_"},
+    "WFC": {"utiltype": 71, "nodetype": 1423, "group_path": ["Workflow", "Workflow Categories"], "group_type": "WorkflowCategories", "file_prefix": "WorkflowCategory_"},
     "WFA": {"utiltype": 70, "nodetype": 1421, "group_path": ["Workflow", "Approvals"], "group_type": "Approvals", "file_prefix": "WorkflowApproval_"},
     "WFT": {"utiltype": 69, "nodetype": 1417, "group_path": ["Workflow", "Tasks"], "group_type": "Tasks", "file_prefix": "WorkflowTask_"},
-    "WAT": {"utiltype": 95, "nodetype": 1409, "group_path": ["Workflow", "Automated Tasks"], "group_type": "Automated Tasks", "file_prefix": "WorkflowAutomatedTask_"},
-    "WFY": {"utiltype": 68, "nodetype": 1412, "group_path": ["Workflow", "Workflow Types"], "group_type": "Workflow Types", "file_prefix": "WorkflowType_"},
+    "WAT": {"utiltype": 95, "nodetype": 1409, "group_path": ["Workflow", "Automated Tasks"], "group_type": "AutomatedTasks", "file_prefix": "WorkflowAutomatedTask_"},
+    "WFY": {"utiltype": 68, "nodetype": 1412, "group_path": ["Workflow", "Workflow Types"], "group_type": "WorkflowTypes", "file_prefix": "WorkflowType_"},
     "WFH": {"utiltype": 139, "nodetype": 1397, "group_path": ["Workflow", "Providers", "HierarchyAssignment"], "group_type": "HierarchyAssignment", "file_prefix": "WorkflowHierarchyProvider_"},
     "CDP": {"utiltype": 115, "nodetype": 1608, "group_path": ["Security", "Code Permissions"], "group_type": "SecurityCodePermissions", "file_prefix": "CodePermission_"},
     "PRV": {"utiltype": 134, "nodetype": 1628, "group_path": ["Security", "Privileges"], "group_type": "SecurityPrivileges", "file_prefix": "Privilege_"},
@@ -267,4 +267,28 @@ PREFIX_INDEX = {
     _meta["file_prefix"]: _mnemonic
     for _mnemonic, _meta in XPO_TYPES.items()
     if _meta.get("file_prefix")
+}
+
+
+# (тип контрола, имя свойства) -> причина недопустимости. База знаний ЗАВЕДЕНА
+# точечными находками, а не выведена из документации — это блок-лист
+# ПОДТВЕРЖДЁННО несуществующих свойств, а не полный справочник допустимых
+# (полный справочник рисковал бы ложными срабатываниями на свойствах,
+# которые просто ещё не встречались). Каждая запись сверена с реальным
+# экспортом AX 2012 — свойства нет ни у одного контрола такого типа в боевой
+# выгрузке (`Forms\SysImportDialog.xpo`, `Forms\SysCompareForm.xpo` и др.).
+# AX ТАКИЕ свойства при импорте не отклоняет, а молча пропускает
+# (`[WARN] пропускается свойство X`), поэтому баг не виден до тестирования
+# самого поведения формы. Пополнять по факту новых находок.
+INVALID_CONTROL_PROPERTIES = {
+    ("STATICTEXT", "Label"):
+        "у STATICTEXT нет Label — есть Text; подпись перед значением делается "
+        "обёрткой GROUP.Caption или префиксом в самой строке",
+    ("STATICTEXT", "WidthMode"):
+        "такого свойства нет ни у одного контрола в AX 2012",
+    ("TREE", "ShowLabel"):
+        "у TREE нет ShowLabel — сверено с боевыми формами SysImportDialog/SysCompareForm",
+    ("STRINGEDIT", "StringSize"):
+        "StringSize контрол берёт из EDT/поля таблицы через DataField; на "
+        "несвязанном (AutoDeclaration-only) StringEdit свойство не действует",
 }
