@@ -81,10 +81,23 @@ def read_text(path: pathlib.Path) -> str:
 
 
 def gather_files(target: pathlib.Path) -> List[pathlib.Path]:
+    """Рекурсивно, как validate_xpo.gather_files — иначе на канонической
+    AOT-раскладке (XPO/Classes/, XPO/Data Dictionary/Tables/, ...) верхнеуровневый
+    `glob` не находит ничего и молча даёт "Files: 0", читаемое как "всё чисто".
+    """
     if target.is_file():
         return [target]
     if target.is_dir():
-        return sorted(p for p in target.glob("*.xpo") if p.parent.name != "_release")
+        out = []
+        for p in sorted(target.rglob("*.xpo")):
+            try:
+                rel_parts = p.relative_to(target).parts
+            except ValueError:
+                rel_parts = (p.name,)
+            if "_release" in rel_parts:
+                continue
+            out.append(p)
+        return out
     return []
 
 
