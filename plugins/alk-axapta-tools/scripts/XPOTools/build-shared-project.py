@@ -201,6 +201,9 @@ PROJECT_GROUP_TYPE_OVERRIDES = {
     "Roles": "SecurityRoles",
     "Process Cycles": "SecurityProcessCycles",
     "Policies": "SecurityPolicies",
+    # Родительский контейнер VSP/CSP — своих object-узлов не несёт, поэтому
+    # group_type из XPO_TYPES к нему не применяется, только этот override.
+    "Visual Studio Projects": "VisualStudioProjects",
 }
 
 
