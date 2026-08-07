@@ -15,7 +15,7 @@
 Запуск:
     python analyze-trace.py summary C:\\AxTrace\\DataCollector01.etl
     python analyze-trace.py hot trace.xml --limit 30
-    python analyze-trace.py stack "DLL.new"
+    python analyze-trace.py stack "DLL.new" trace.xml
     python analyze-trace.py tree trace.xml --since 17:08:00 --until 17:08:05
     python analyze-trace.py hung trace.etl
 
@@ -41,6 +41,17 @@ if sys.platform == "win32":
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
 
 
+def _limit(value: str) -> int:
+    """--limit меньше единицы показывать нечего, а отчёту ломает раскладку."""
+    try:
+        number = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"нужно целое число, получено: {value}")
+    if number < 1:
+        raise argparse.ArgumentTypeError(f"должно быть не меньше 1, получено: {number}")
+    return number
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="analyze-trace",
@@ -57,29 +68,29 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("hot", help="топ методов X++ по числу вызовов")
     add_common(p)
-    p.add_argument("--limit", type=int, default=25, help="сколько строк показать (25)")
+    p.add_argument("--limit", type=_limit, default=25, help="сколько строк показать (25)")
 
     p = sub.add_parser("stack", help="кто вызывает указанный метод")
     p.add_argument("method", help="имя метода или его часть, регистр не важен")
     add_common(p)
-    p.add_argument("--limit", type=int, default=10, help="сколько цепочек показать (10)")
+    p.add_argument("--limit", type=_limit, default=10, help="сколько цепочек показать (10)")
 
     p = sub.add_parser("tree", help="дерево вызовов за окно времени")
     add_common(p)
     p.add_argument("--since", default="", help="начало окна, HH:MM:SS")
     p.add_argument("--until", default="", help="конец окна, HH:MM:SS")
-    p.add_argument("--limit", type=int, default=200, help="предел строк (200)")
+    p.add_argument("--limit", type=_limit, default=200, help="предел строк (200)")
 
     p = sub.add_parser("rpc", help="серверные вызовы")
     add_common(p)
-    p.add_argument("--limit", type=int, default=25, help="сколько строк показать (25)")
+    p.add_argument("--limit", type=_limit, default=25, help="сколько строк показать (25)")
 
     p = sub.add_parser("hung", help="незавершённые серверные вызовы")
     add_common(p)
 
     p = sub.add_parser("sql", help="статистика SQL")
     add_common(p)
-    p.add_argument("--limit", type=int, default=15, help="сколько соединений показать (15)")
+    p.add_argument("--limit", type=_limit, default=15, help="сколько соединений показать (15)")
 
     return parser
 

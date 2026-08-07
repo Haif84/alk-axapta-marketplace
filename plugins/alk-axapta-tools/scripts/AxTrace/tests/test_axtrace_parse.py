@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sys
 import tempfile
+import tracemalloc
 import unittest
 from pathlib import Path
 
@@ -193,6 +194,105 @@ class TestBuildStack(SampleTraceCase):
         last_event, last_ancestors = chains[-1]
         self.assertEqual(last_event.qualified_name(), "Info.onEventGoingIdle")
         self.assertEqual(last_ancestors, [])
+
+
+def _xpp_event(tid: str, cls: str, method: str, level: int, time: str) -> str:
+    """Минимальное событие 56 — для проб, где важны только поток и уровень."""
+    return f"""<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+  <System><EventID>56</EventID>
+    <TimeCreated SystemTime="2026-08-06T{time}00+02:59" />
+    <Execution ProcessID="100" ThreadID="{tid}" />
+  </System>
+  <EventData>
+    <Data Name="AxXppClassName">{cls}</Data>
+    <Data Name="AxXppMethodName">{method}</Data>
+    <Data Name="AxFormPath">NULL</Data>
+    <Data Name="AxNestLevel">{level}</Data>
+  </EventData>
+</Event>"""
+
+
+class TestBuildStackThreads(unittest.TestCase):
+    """Набор пишет всю машину: события разных потоков лежат вперемешку."""
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.xml = Path(self._tmp.name) / "threads.xml"
+
+    def tearDown(self) -> None:
+        self._tmp.cleanup()
+
+    def _write(self, events: list[str]) -> None:
+        body = "\n".join(events)
+        self.xml.write_text(
+            f'<?xml version="1.0" encoding="UTF-8"?>\n<Events>\n{body}\n</Events>\n',
+            encoding="utf-8",
+        )
+
+    def test_stack_does_not_leak_between_threads(self) -> None:
+        """Предок берётся из своего потока, а не из ближайшего по времени события.
+
+        Без разделения по потокам Poller.read получал предком Form.open из чужого
+        потока — ровно ту ложную причинность, от которой предостерегает скилл.
+        """
+        self._write([
+            _xpp_event("111", "Poller", "run", 1, "15:00:00.100000"),
+            _xpp_event("222", "Form", "open", 1, "15:00:00.200000"),
+            _xpp_event("111", "Poller", "read", 2, "15:00:00.300000"),
+            _xpp_event("222", "Form", "load", 2, "15:00:00.400000"),
+        ])
+        chains = {
+            ev.qualified_name(): ancestors
+            for ev, ancestors in build_stack(iter_events(self.xml, (XPP_BEGIN,)))
+        }
+        self.assertEqual(chains["Poller.read"], ["Poller.run"])
+        self.assertEqual(chains["Form.load"], ["Form.open"])
+
+    def test_return_in_one_thread_does_not_reset_another(self) -> None:
+        """Возврат на верхний уровень в одном потоке не должен обрезать чужой стек."""
+        self._write([
+            _xpp_event("111", "A", "outer", 1, "15:00:00.100000"),
+            _xpp_event("111", "A", "inner", 2, "15:00:00.200000"),
+            _xpp_event("222", "B", "top", 1, "15:00:00.300000"),   # сброс в потоке 222
+            _xpp_event("111", "A", "deepest", 3, "15:00:00.400000"),
+        ])
+        chains = dict(
+            (ev.qualified_name(), anc)
+            for ev, anc in build_stack(iter_events(self.xml, (XPP_BEGIN,)))
+        )
+        self.assertEqual(chains["A.deepest"], ["A.outer", "A.inner"])
+
+
+class TestStreaming(unittest.TestCase):
+    def test_memory_does_not_grow_with_event_count(self) -> None:
+        """elem.clear() освобождает только содержимое: пустые узлы копятся у корня.
+
+        На многомиллионном файле это сотни мегабайт, то есть потоковый разбор
+        перестаёт быть потоковым. Проверяем, что расход не растёт с числом событий.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            xml = Path(tmp) / "many.xml"
+            with xml.open("w", encoding="utf-8") as handle:
+                handle.write('<?xml version="1.0" encoding="UTF-8"?>\n<Events>\n')
+                for i in range(20000):
+                    handle.write(
+                        _xpp_event("11", f"C{i % 50}", "m", i % 5 + 1, "15:00:00.000000") + "\n"
+                    )
+                handle.write("</Events>\n")
+
+            tracemalloc.start()
+            try:
+                early = late = 0
+                for seen, _ in enumerate(iter_events(xml, (XPP_BEGIN,)), 1):
+                    if seen == 5000:
+                        early = tracemalloc.get_traced_memory()[0]
+                    elif seen == 20000:
+                        late = tracemalloc.get_traced_memory()[0]
+            finally:
+                tracemalloc.stop()
+
+        # до правки прирост на этих 15 000 событиях был около 1.2 МБ и рос линейно
+        self.assertLess(late - early, 300 * 1024, f"память растёт: {early} -> {late}")
 
 
 class TestResolveInput(SampleTraceCase):

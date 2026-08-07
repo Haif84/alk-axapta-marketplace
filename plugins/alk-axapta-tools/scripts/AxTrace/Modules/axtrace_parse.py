@@ -17,7 +17,8 @@
 
 Стек X++ восстанавливается по AxNestLevel: события 56 идут в порядке выполнения,
 уровень вложенности даёт отступ. Предки метода на уровне L — ближайшие
-предшествующие события уровней 1..L-1.
+предшествующие события уровней 1..L-1 ТОГО ЖЕ ПОТОКА: набор пишет всю машину,
+и события разных потоков и разных клиентов AX лежат в файле вперемешку.
 """
 
 from __future__ import annotations
@@ -120,9 +121,15 @@ def iter_events(xml_path: Path, wanted_ids: Iterable[int] | None = None) -> Iter
     """
     wanted = frozenset(wanted_ids) if wanted_ids is not None else None
 
-    context = ElementTree.iterparse(str(xml_path), events=("end",))
-    for _, elem in context:
-        if _local(elem.tag) != "Event":
+    # Корень нужен, чтобы отцеплять от него разобранные события. Без этого
+    # elem.clear() освобождает только содержимое: сам пустой узел остаётся
+    # в списке детей корня, и на многомиллионном файле они копятся сотнями
+    # мегабайт — то есть потоковый разбор перестаёт быть потоковым.
+    context = ElementTree.iterparse(str(xml_path), events=("start", "end"))
+    _, root = next(iter(context))
+
+    for action, elem in context:
+        if action != "end" or _local(elem.tag) != "Event":
             continue
 
         event_id = 0
@@ -159,6 +166,7 @@ def iter_events(xml_path: Path, wanted_ids: Iterable[int] | None = None) -> Iter
             yield Event(event_id, time, pid, tid, opcode, data)
 
         elem.clear()
+        root.clear()
 
 
 def convert_etl(etl_path: Path, xml_path: Path | None = None) -> Path:
@@ -219,12 +227,20 @@ def build_stack(events: Iterable[Event]) -> Iterator[tuple[Event, list[str]]]:
 
     Отдаёт пары (событие, цепочка предков). Цепочка — имена методов уровней 1..L-1,
     то есть кто вызвал этот метод, от корня к непосредственному вызывающему.
+
+    Стек ведётся ОТДЕЛЬНО для каждого потока (ProcessID + ThreadID). Общий стек на
+    всю трассировку давал бы выдуманные цепочки: набор пишет всю машину, поэтому
+    события фонового потока, второго открытого клиента AX и главного потока идут
+    вперемешку, а AxNestLevel у каждого свой. Ровно эту ложную причинность —
+    «рядом по времени, значит вызвал» — и нельзя себе позволить в отчётах.
     """
-    current: dict[int, str] = {}
+    # (pid, tid) -> {уровень: имя метода}
+    threads: dict[tuple[str, str], dict[int, str]] = {}
     for ev in events:
         level = ev.nest_level
         if level <= 0:
             continue
+        current = threads.setdefault((ev.pid, ev.tid), {})
         current[level] = ev.qualified_name()
         # уровни глубже текущего больше не актуальны
         for deeper in [lvl for lvl in current if lvl > level]:

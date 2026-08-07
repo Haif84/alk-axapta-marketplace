@@ -1,4 +1,4 @@
-#!/usr/bin/env pwsh
+﻿#!/usr/bin/env pwsh
 <#
 .SYNOPSIS
     Управление трассировкой клиента Microsoft Dynamics AX 2012.
@@ -85,26 +85,39 @@ function Test-Admin {
         [Security.Principal.WindowsBuiltInRole]::Administrator)
 }
 
+function ConvertTo-QuotedArg([string]$Value) {
+    <#  Start-Process склеивает -ArgumentList пробелами и НЕ кавычит элементы сам.
+        Имя набора по умолчанию — «AX Trace», с пробелом: без кавычек дочерний
+        процесс получал «-Name AX Trace», падал на разборе аргументов и не создавал
+        файл-реле, а вызывающий винил в этом UAC. Кавычим каждый элемент сами.
+        Хвостовые обратные слэши удваиваем: в "C:\traces\" последний слэш иначе
+        экранирует закрывающую кавычку и склеивает аргумент со следующим. #>
+    if ($null -eq $Value) { return '""' }
+    return '"' + ([regex]::Replace($Value, '(\\+)$', '$1$1')) + '"'
+}
+
 function Invoke-Elevated {
     <#  Перезапускает себя с повышением. Вывод дочернего процесса иначе теряется,
         поэтому он пишет его в файл, а мы показываем содержимое. #>
     $relay = [IO.Path]::Combine([IO.Path]::GetTempPath(), "axtrace-$([guid]::NewGuid()).txt")
 
-    # Dest разрешаем в абсолютный путь: у повышенного процесса другой текущий каталог
-    $destAbs = $Dest
-    $resolved = Resolve-Path -LiteralPath $Dest -ErrorAction SilentlyContinue
-    if ($resolved) { $destAbs = $resolved.Path }
+    # Dest разрешаем в абсолютный путь: UAC запускает повышенный процесс в System32,
+    # и относительный путь увёл бы туда копию трассировки. Resolve-Path тут не годится —
+    # он молча не срабатывает на ещё не созданной папке, а именно её обычно и просят.
+    $destAbs = try {
+        [IO.Path]::GetFullPath([IO.Path]::Combine((Get-Location).ProviderPath, $Dest))
+    } catch { $Dest }
 
     $argv = @(
         '-NoProfile', '-ExecutionPolicy', 'Bypass',
-        '-File', $PSCommandPath,
+        '-File', (ConvertTo-QuotedArg $PSCommandPath),
         $Action,
-        '-Name', $Name,
+        '-Name', (ConvertTo-QuotedArg $Name),
         '-MaxMB', $MaxMB,
-        '-Dest', $destAbs,
-        '-RelayFile', $relay
+        '-Dest', (ConvertTo-QuotedArg $destAbs),
+        '-RelayFile', (ConvertTo-QuotedArg $relay)
     )
-    if ($Path) { $argv += @('-Path', $Path) }
+    if ($Path) { $argv += @('-Path', (ConvertTo-QuotedArg $Path)) }
     if ($Force) { $argv += '-Force' }
 
     Write-Host "Требуются права администратора — подтвердите запрос UAC..."

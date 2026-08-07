@@ -49,25 +49,31 @@ description: |
 
 ## Исполнители
 
-| Задача | Команда |
-|---|---|
-| создать набор сборщиков | `ax-trace setup -Path <куда писать> [-MaxMB 512]` |
-| начать / остановить запись | `ax-trace start` / `ax-trace stop` |
-| состояние набора | `ax-trace status` |
-| забрать файл из папки СИСТЕМЫ | `ax-trace fetch -Dest <папка>` |
-| общая сводка | `analyze-trace summary <файл>` |
-| горячие методы | `analyze-trace hot <файл> [--limit N]` |
-| кто вызывает метод | `analyze-trace stack "<метод>" <файл>` |
-| дерево вызовов за окно | `analyze-trace tree <файл> --since HH:MM:SS --until HH:MM:SS` |
-| серверные вызовы | `analyze-trace rpc <файл>` |
-| зависшие вызовы | `analyze-trace hung <файл>` |
-
-Fallback при не настроенном PATH:
+Зови по полному пути от `$pluginRoot` — в отличие от XPOTools, каталог
+`scripts\AxTrace\bin` в PATH не добавляется:
 
 ```powershell
-& "$pluginRoot\scripts\AxTrace\ax-trace.ps1" setup -Path C:\ProgramData\AxTrace
-python "$pluginRoot\scripts\AxTrace\analyze-trace.py" hot C:\traces\axtrace-20260807-1046.etl
+$axTrace  = "$pluginRoot\scripts\AxTrace\ax-trace.ps1"
+$analyze  = "$pluginRoot\scripts\AxTrace\analyze-trace.py"
 ```
+
+| Задача | Команда |
+|---|---|
+| создать набор сборщиков | `& $axTrace setup -Path <куда писать> [-MaxMB 512]` |
+| начать / остановить запись | `& $axTrace start` / `& $axTrace stop` |
+| состояние набора | `& $axTrace status` |
+| забрать файл из папки СИСТЕМЫ | `& $axTrace fetch -Dest <папка>` |
+| общая сводка | `python $analyze summary <файл>` |
+| горячие методы | `python $analyze hot <файл> [--limit N]` |
+| кто вызывает метод | `python $analyze stack "<метод>" <файл>` |
+| дерево вызовов за окно | `python $analyze tree <файл> --since HH:MM:SS --until HH:MM:SS` |
+| серверные вызовы | `python $analyze rpc <файл>` |
+| зависшие вызовы | `python $analyze hung <файл>` |
+
+У `stack` метод идёт **перед** файлом — единственная подкоманда с таким порядком.
+
+Короткие имена `ax-trace` и `analyze-trace` заработают, только если каталог
+`scripts\AxTrace\bin` добавили в PATH вручную.
 
 ## Алгоритм
 
@@ -81,7 +87,7 @@ python "$pluginRoot\scripts\AxTrace\analyze-trace.py" hot C:\traces\axtrace-2026
 ### 2. Создай набор (один раз на машине)
 
 ```powershell
-ax-trace setup -Path <каталог> -MaxMB 512
+& $axTrace setup -Path <каталог> -MaxMB 512
 ```
 
 Скрипт сам запросит повышение прав — `setup` требует администратора всегда, обойти это
@@ -109,10 +115,10 @@ Add-LocalGroupMember -Group $g -Member $env:USERNAME
 ### 3. Снимай прицельно
 
 ```powershell
-ax-trace start
+& $axTrace start
 # воспроизведи проблему: открой форму, дождись подвисания, поработай 2-5 минут
-ax-trace stop
-ax-trace fetch -Dest .\traces
+& $axTrace stop
+& $axTrace fetch -Dest .\traces
 ```
 
 Не оставляй запись надолго. Пять минут на нагруженном клиенте дают 150–700 МБ, а разбор
@@ -121,7 +127,7 @@ ax-trace fetch -Dest .\traces
 ### 4. Начни разбор со сводки
 
 ```powershell
-analyze-trace summary .\traces\axtrace-20260807-1046.etl
+python $analyze summary .\traces\axtrace-20260807-1046.etl
 ```
 
 Она покажет окно времени, число событий и топы. Конвертация `.etl` в XML делается
@@ -130,7 +136,7 @@ analyze-trace summary .\traces\axtrace-20260807-1046.etl
 ### 5. Найди горячее место
 
 ```powershell
-analyze-trace hot .\traces\axtrace-20260807-1046.etl --limit 30
+python $analyze hot .\traces\axtrace-20260807-1046.etl --limit 30
 ```
 
 **Как читать.** Одинаковое число вызовов у нескольких методов почти всегда означает,
@@ -151,7 +157,7 @@ analyze-trace hot .\traces\axtrace-20260807-1046.etl --limit 30
 ### 6. Выясни, кто это вызывает
 
 ```powershell
-analyze-trace stack "DLL.new" .\traces\axtrace-20260807-1046.etl
+python $analyze stack "DLL.new" .\traces\axtrace-20260807-1046.etl
 ```
 
 Отчёт даёт цепочки предков с долями. Реальный пример — 92% всех созданий нативных обёрток
@@ -169,7 +175,7 @@ analyze-trace stack "DLL.new" .\traces\axtrace-20260807-1046.etl
 ### 7. Проверь обмен с сервером
 
 ```powershell
-analyze-trace rpc .\traces\axtrace-20260807-1046.etl
+python $analyze rpc .\traces\axtrace-20260807-1046.etl
 ```
 
 Смотри на пару «число вызовов + переданные байты». Десятки тысяч `ServerNext` означают
@@ -189,6 +195,12 @@ analyze-trace rpc .\traces\axtrace-20260807-1046.etl
 а не по близости меток времени. Дважды на этом ошибались: чтения AOT приписали поллеру
 только потому, что он отработал за сто миллисекунд до них. На деле поллер к тому моменту
 уже закончил, а чтения сделал другой код.
+
+**`AxNestLevel` считается внутри своего потока.** Набор пишет всю машину, поэтому события
+фоновых потоков и второго открытого клиента AX лежат в файле вперемешку, и у каждого
+своя нумерация уровней. `stack` это учитывает — предков берёт только из того же
+`ProcessID`+`ThreadID`. Читая сырой XML глазами, помни то же самое: соседние строки
+запросто принадлежат разным потокам.
 
 **Отсутствие событий X++ рядом с серверным вызовом означает, что вызов сделал нативный слой
 MorphX**, а не код X++. Так выглядят раскрытие узла в дереве AOT, открытие редактора,
@@ -225,12 +237,18 @@ MorphX**, а не код X++. Так выглядят раскрытие узл�
 **Найди зависший вызов:**
 
 ```powershell
-analyze-trace hung .\traces\axtrace-20260807-1046.etl
+python $analyze hung .\traces\axtrace-20260807-1046.etl
 ```
 
 Отчёт покажет серверные вызовы, у которых есть начало и нет завершения. Дальше — окно
-вокруг него через `analyze-trace tree --since --until`, чтобы увидеть, какой метод X++
+вокруг него через `analyze-trace tree <файл> --since --until`, чтобы увидеть, какой метод X++
 его выпустил.
+
+**Поправка на кольцевой буфер.** Границы файла всегда рваные: в начале лежат концы
+вызовов, чьё начало уже вытеснено (отчёт считает их отдельно и это норма), а в самом
+хвосте — начало, чей конец просто не успел записаться. Самая поздняя строка «ЗАВИСЛО»
+поэтому почти всегда артефакт границы. Настоящий клин — тот, после которого поток
+продолжал что-то делать: события есть, а вызов так и не закрылся.
 
 **Отличай замирание от отказа.** Это разные события, разнесённые во времени: клиент сначала
 надолго встаёт, и лишь потом вызов срывается. Трассировка, остановленная по признаку

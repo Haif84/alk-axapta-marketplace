@@ -37,8 +37,10 @@ def _print_table(rows: list[tuple[str, int]], title: str, limit: int, unit: str 
         print("  (пусто)")
         return
     top = rows[0][1]
-    name_width = min(70, max(len(r[0]) for r in rows[:limit]))
-    for name, count in rows[:limit]:
+    visible = rows[:limit] if limit > 0 else []
+    # default=0: при --limit 0 показывать нечего, но итоговую строку всё равно печатаем
+    name_width = min(70, max((len(r[0]) for r in visible), default=0))
+    for name, count in visible:
         print(f"  {count:>9,}  {name:<{name_width}}  {_bar(count, top)}")
     total = sum(c for _, c in rows)
     print(f"  {'':>9}  всего {unit}: {total:,} по {len(rows):,} позициям")
@@ -55,7 +57,7 @@ def hot(xml_path: Path, limit: int = 25) -> None:
     print(
         "\n  Читать так: одинаковое число вызовов у двух методов почти всегда значит,\n"
         "  что они в одном цикле. Ищи не самый частый метод, а самый частый КОРЕНЬ —\n"
-        "  для этого прогони: analyze-trace.py stack <метод>"
+        "  для этого прогони: analyze-trace.py stack <метод> <файл>"
     )
 
 
@@ -147,36 +149,67 @@ def rpc(xml_path: Path, limit: int = 25) -> None:
 
 
 def hung(xml_path: Path) -> None:
-    """Вызовы RPC, начавшиеся и не завершившиеся — след зависания."""
-    open_calls: dict[tuple[str, str], Event] = {}
+    """Вызовы RPC, начавшиеся и не завершившиеся — след зависания.
+
+    Начало и конец сопоставляются по тройке (процесс, поток, имя вызова).
+    Одного (процесс, поток) мало: конец вложенного или соседнего вызова тогда
+    гасит чужое начало, и настоящее зависание пропадает из отчёта.
+
+    Буфер набора кольцевой, поэтому у начала файла закономерно встречаются концы
+    без начал (их вытеснило), а самый хвост может содержать начало, чей конец
+    просто не успел записаться. Первое считаем и показываем отдельно как признак
+    вытеснения, второе оговариваем в выводе — это граница записи, а не клин.
+    """
+    open_calls: dict[tuple[str, str], list[Event]] = defaultdict(list)
     closed = 0
+    orphan_ends = 0
 
     for ev in iter_events(xml_path, (RPC_BEGIN, RPC_END)):
         if not ev.rpc_name:
             continue
-        key = (ev.pid, ev.tid)
+        stack = open_calls[(ev.pid, ev.tid)]
         if ev.event_id == RPC_BEGIN:
-            open_calls[key] = ev
+            stack.append(ev)
+            continue
+        # ищем ближайшее сверху начало того же вызова; всё, что открылось глубже
+        # него, к этому моменту тоже закрыто — иначе конец бы сюда не дошёл
+        for i in range(len(stack) - 1, -1, -1):
+            if stack[i].rpc_name == ev.rpc_name:
+                del stack[i:]
+                closed += 1
+                break
         else:
-            closed += 1
-            open_calls.pop(key, None)
+            orphan_ends += 1
+
+    still_open = sorted(
+        (ev for stack in open_calls.values() for ev in stack),
+        key=lambda e: e.time,
+    )
 
     print("\n=== Незавершённые серверные вызовы ===")
     print(f"  завершено вызовов: {closed:,}")
-    if not open_calls:
+    if orphan_ends:
+        print(
+            f"  концов без начала: {orphan_ends:,} — начало вытеснено кольцевым буфером, "
+            "это норма"
+        )
+    if not still_open:
         print("  Незавершённых нет — зависаний в этом окне не было.")
         return
 
-    print(f"  ЗАВИСЛО: {len(open_calls)}\n")
-    for (pid, tid), ev in sorted(open_calls.items(), key=lambda kv: kv[1].time):
+    print(f"  ЗАВИСЛО: {len(still_open)}\n")
+    for ev in still_open:
         print(
-            f"  {ev.time}  pid={pid} tid={tid} сессия={ev.session} "
+            f"  {ev.time}  pid={ev.pid} tid={ev.tid} сессия={ev.session} "
             f"пользователь={ev.user}\n      {ev.rpc_name}"
         )
 
     print(
-        "\n  Дальше: посмотри, какой метод X++ выпустил этот вызов —\n"
-        "  analyze-trace.py tree --since <время минус секунда> --until <время>"
+        "\n  Самый поздний из списка часто не клин, а граница записи: конец вызова\n"
+        "  просто не успел попасть в файл. Смотри на те, после которых поток ещё\n"
+        "  что-то делал.\n"
+        "  Дальше: посмотри, какой метод X++ выпустил этот вызов —\n"
+        "  analyze-trace.py tree <файл> --since <время минус секунда> --until <время>"
     )
 
 
