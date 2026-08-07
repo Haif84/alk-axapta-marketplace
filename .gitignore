@@ -5,4 +5,10 @@ plugins/alk-axapta-tools/scripts/XPOTools/*.pyc
 plugins/alk-axapta-tools/scripts/XPOTools/**/*.pyc
 plugins/alk-axapta-tools/scripts/XPOTools/.pytest_cache/
 plugins/alk-axapta-tools/scripts/XPOTools/.venv/
+plugins/alk-axapta-tools/scripts/AxTrace/__pycache__/
+plugins/alk-axapta-tools/scripts/AxTrace/**/__pycache__/
+plugins/alk-axapta-tools/scripts/AxTrace/*.pyc
+plugins/alk-axapta-tools/scripts/AxTrace/**/*.pyc
+plugins/alk-axapta-tools/scripts/AxTrace/.pytest_cache/
+plugins/alk-axapta-tools/scripts/AxTrace/.venv/
 .env
