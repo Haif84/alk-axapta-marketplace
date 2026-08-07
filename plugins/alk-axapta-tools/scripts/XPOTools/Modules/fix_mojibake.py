@@ -21,8 +21,14 @@ import sys
 from typing import List, Tuple
 
 if sys.platform == "win32":
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
-    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
+    # reconfigure(), не пересоздание TextIOWrapper: при импорте нескольких таких
+    # скриптов в одном процессе (например unittest discover тянет их как модули)
+    # каждое присваивание оборачивало ТЕКУЩИЙ .buffer заново — старая обёртка теряла
+    # ссылку, GC закрывал её вместе с общим нижним буфером, и следующий модуль писал
+    # уже в закрытый поток (ValueError: I/O operation on closed file).
+    for _stream in (sys.stdout, sys.stderr):
+        if hasattr(_stream, "reconfigure"):
+            _stream.reconfigure(encoding="utf-8", errors="replace")
 
 
 def _cyrillic_count(s: str) -> int:
