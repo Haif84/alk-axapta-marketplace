@@ -27,6 +27,7 @@ Microsoft Dynamics AX 2012 (ALK). Один репозиторий обслужи
 | `axapta-project-export` | Сборка финального `.xpo`-бандла |
 | `axapta-project-manage` | Organize/flatten/sync/cleanup папки `XPO/` |
 | `axapta-xpo-helper` | Resource BINARY (xlsx→xpo) + конвенции `XMLExcelReport_RU` |
+| `axapta-trace-helper` | Профилирование клиента AX родной трассировкой: горячие методы, стек по `AxNestLevel`, RPC, зависшие вызовы |
 
 XPOTools бандлируется внутри плагина — отдельная установка PATH не нужна.
 Предусловие на машине: **Python ≥ 3.9** и доступ к боевой выгрузке AOT-Prod.
@@ -65,6 +66,7 @@ XPOTools бандлируется внутри плагина — отдельн
 /alk-axapta-tools:axapta-project-export
 /alk-axapta-tools:axapta-project-manage
 /alk-axapta-tools:axapta-xpo-helper
+/alk-axapta-tools:axapta-trace-helper
 /alk-self-update:check-updates
 ```
 

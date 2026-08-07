@@ -1,0 +1,11 @@
+.env
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.venv/
+.idea/
+.vscode/
+# рабочие файлы трассировок и их разбор — в репозиторий не кладём
+*.etl
+*.xml
