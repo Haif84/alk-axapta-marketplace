@@ -1,8 +1,8 @@
 {
   "name": "alk-axapta-tools",
   "displayName": "ALK Axapta Tools",
-  "description": "Скиллы AX 2012 (ALK): setup, mod-comments (объект текущей мод), project-export/manage, axapta-xpo-helper (Resource + XMLExcelReport_RU), axapta-trace-helper (профилирование клиента). XPOTools (Python).",
-  "version": "1.6.19",
+  "description": "Скиллы AX 2012 (ALK): setup, mod-comments (объект текущей мод), project-export/manage, axapta-xpo-helper (Resource + XMLExcelReport_RU), axapta-trace-helper (профилирование клиента), axapta-mcp-helper (живой MCP-сервер AX). XPOTools (Python).",
+  "version": "1.6.20",
   "author": {
     "name": "ALK Development Team"
   },
