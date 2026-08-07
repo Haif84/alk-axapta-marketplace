@@ -1,7 +1,7 @@
 {
   "name": "alk-axapta-tools",
-  "description": "Скиллы для работы с проектами Microsoft Dynamics AX 2012 (ALK): setup, mod-comments (правило объекта текущей мод), project-export/manage, axapta-xpo-helper (Resource BINARY + XMLExcelReport_RU), axapta-trace-helper (профилирование клиента трассировкой). Включает XPOTools (Python; CLAUDE_PLUGIN_ROOT / fallback-кэш).",
-  "version": "1.6.18",
+  "description": "Скиллы для работы с проектами Microsoft Dynamics AX 2012 (ALK): setup, mod-comments (правило объекта текущей мод), project-export/manage, axapta-xpo-helper (Resource BINARY + XMLExcelReport_RU), axapta-trace-helper (профилирование клиента трассировкой), axapta-mcp-helper (живой MCP-сервер AX). Включает XPOTools (Python; CLAUDE_PLUGIN_ROOT / fallback-кэш).",
+  "version": "1.6.19",
   "author": {
     "name": "ALK Development Team"
   },
