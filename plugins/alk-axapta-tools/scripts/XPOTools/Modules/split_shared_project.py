@@ -15,7 +15,6 @@ MNU → Menu_, FTM → MenuItemDisplay_/MenuItemOutput_/MenuItemAction_ и т.д
 """
 
 import argparse
-import io
 import os
 import pathlib
 import re

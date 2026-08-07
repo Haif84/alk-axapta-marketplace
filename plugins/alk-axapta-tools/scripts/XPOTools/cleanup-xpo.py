@@ -12,7 +12,6 @@
 """
 
 import argparse
-import io
 import os
 import pathlib
 import shutil

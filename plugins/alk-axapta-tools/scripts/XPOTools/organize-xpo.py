@@ -15,7 +15,6 @@ _release/ исключается из обработки.
 """
 
 import argparse
-import io
 import os
 import pathlib
 import re

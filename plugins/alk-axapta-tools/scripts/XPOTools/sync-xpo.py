@@ -16,7 +16,6 @@ Read-only сравнение по `(mnemonic, name)` объектов:
 
 import argparse
 import difflib
-import io
 import pathlib
 import re
 import sys
