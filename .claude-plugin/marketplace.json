@@ -4,13 +4,13 @@
     "name": "ALK Development Team"
   },
   "description": "Магазин скиллов: инструменты для работы с проектами Microsoft Dynamics AX 2012 (ALK).",
-  "version": "1.9.11",
+  "version": "1.9.12",
   "plugins": [
     {
       "name": "alk-axapta-tools",
       "source": "./plugins/alk-axapta-tools",
-      "description": "Скиллы setup, mod-comments (объект текущей мод), project-export/manage, axapta-xpo-helper + XPOTools.",
-      "version": "1.6.16",
+      "description": "Скиллы setup, mod-comments (объект текущей мод), project-export/manage, axapta-xpo-helper, axapta-mcp-helper + XPOTools.",
+      "version": "1.6.17",
       "author": {
         "name": "ALK Development Team"
       }
