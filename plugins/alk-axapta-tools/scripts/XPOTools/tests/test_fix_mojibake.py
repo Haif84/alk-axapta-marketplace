@@ -50,6 +50,18 @@ class TestGatherFiles(unittest.TestCase):
 
         self.assertEqual(found, {"Foo.xpo"})
 
+    def test_release_targeted_directly_returns_nothing(self):
+        # Регрессия: rel_parts = p.relative_to(target).parts для файла ПРЯМО в
+        # target не содержит "_release" вовсе, если target и есть _release —
+        # `fix-mojibake XPO\_release` переставал отказывать и молча переписывал
+        # замороженные релизные .xpo.
+        with tempfile.TemporaryDirectory() as tmp:
+            release = pathlib.Path(tmp) / "_release"
+            release.mkdir()
+            (release / "SharedProject_Foo.xpo").write_text("x", encoding="utf-8")
+
+            self.assertEqual(gather_files(release), [])
+
     def test_single_file_target_returned_as_is(self):
         with tempfile.TemporaryDirectory() as tmp:
             f = pathlib.Path(tmp) / "Foo.xpo"

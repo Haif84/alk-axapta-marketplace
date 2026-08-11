@@ -80,6 +80,17 @@ class TestChecks(unittest.TestCase):
         """Запятая внутри вызова в значении по умолчанию — не второй параметр."""
         self.assertNotIn("param-layout", codes("void m(str _a = f(1, 2))\n{\n}"))
 
+    def test_param_layout_comment_line_after_bare_paren_first_param_not_miscounted(self):
+        """Регрессия: голая '(' на строке объявления, сразу за ней —
+        закомментированная строка (маскируется в пустую). Раньше
+        `start = first + 2` считал, что первый параметр стоит РОВНО на
+        следующей строке, и падал прямо на комментарий — настоящий первый
+        параметр (законно без ведущей запятой) получал ложный param-layout."""
+        self.assertNotIn(
+            "param-layout",
+            codes("void m(\n      // счётчики\n      int _a\n    , int _b)\n{\n}"),
+        )
+
     def test_variable_carrying_object_affix(self):
         self.assertIn("var-affix", codes("void m()\n{\n    BMSetup_CDT BMSetup_CDT;\n}"))
 

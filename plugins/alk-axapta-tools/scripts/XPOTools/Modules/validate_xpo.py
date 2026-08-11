@@ -50,7 +50,9 @@ from xpo_types import (  # noqa: E402
 )
 from config import load_config, validate_config, print_config_warnings  # noqa: E402
 from reserved_words import RESERVED_WORDS  # noqa: E402
-from xpp_style import OBJECT_NAMED_SOURCE_ELEMENTS, check_style, iter_methods  # noqa: E402
+from xpp_style import (  # noqa: E402
+    OBJECT_NAMED_SOURCE_ELEMENTS, check_style, iter_methods, Masked, _signature_span,
+)
 
 if sys.platform == "win32":
     # reconfigure(), не пересоздание TextIOWrapper: при импорте нескольких таких
@@ -620,17 +622,19 @@ def check_unbound_str_in_query(path: pathlib.Path, text: str) -> List[Issue]:
             codes.append((lineno, code))
 
         unbound = set()
-        sig_text = ""
-        for _, code in codes:
-            sig_text += " " + code
-            if "{" in code:
-                break
-        sm = re.search(r"\(([^)]*)\)", sig_text)
-        if sm:
-            for part in sm.group(1).split(","):
-                pm = UNBOUND_STR_PARAM_RE.match(part.strip())
-                if pm:
-                    unbound.add(pm.group(1))
+        # _signature_span считает глубину скобок — плоский re.search(r"\(([^)]*)\)")
+        # обрывался на ПЕРВОЙ ")", и параметр после дефолта с вызовом функции
+        # (`str _b = f(x), str _c`) в список не попадал вовсе.
+        masked = [Masked(code, "") for _, code in codes]
+        sig_first, sig_last = _signature_span(masked)
+        if sig_first >= 0:
+            sig_text = " ".join(m.code for m in masked[sig_first:sig_last + 1])
+            if "(" in sig_text and ")" in sig_text:
+                inner = sig_text[sig_text.find("(") + 1: sig_text.rfind(")")]
+                for part in inner.split(","):
+                    pm = UNBOUND_STR_PARAM_RE.match(part.strip())
+                    if pm:
+                        unbound.add(pm.group(1))
         for _, code in codes:
             lm = UNBOUND_STR_LOCAL_RE.match(code)
             if lm:
@@ -640,14 +644,19 @@ def check_unbound_str_in_query(path: pathlib.Path, text: str) -> List[Issue]:
 
         # По X++-операторам (от `;` до `;`), не по строкам: where/like значимы
         # только внутри query-оператора целиком, а не с первого их появления
-        # после произвольного `if`.
+        # после произвольного `if`. Открывающая `{` тоже завершает накопление
+        # (наравне с `;`): у `while select ... where ... { ... }` заголовок
+        # запроса точкой с запятой не заканчивается вовсе, и без этой границы
+        # тело цикла подряд читалось бы как продолжение того же query-оператора
+        # — переменная, использованная в теле уже ПОСЛЕ `where`, а не в нём
+        # самом, получала бы ложный WARN.
         stmt: List[Tuple[int, str]] = []
         is_query_stmt = False
         for lineno, code in codes:
             stmt.append((lineno, code))
             if QUERY_STATEMENT_RE.search(code):
                 is_query_stmt = True
-            if ";" not in code:
+            if ";" not in code and "{" not in code:
                 continue
             if is_query_stmt:
                 in_clause = False
@@ -955,11 +964,12 @@ def gather_files(target: pathlib.Path) -> List[pathlib.Path]:
     if target.is_dir():
         out = []
         for p in sorted(target.rglob("*.xpo")):
-            try:
-                rel_parts = p.relative_to(target).parts
-            except ValueError:
-                rel_parts = (p.name,)
-            if "_release" in rel_parts:
+            # По АБСОЛЮТНЫМ частям пути, не по относительным target: если
+            # цель — сама папка `_release` (`validate_xpo XPO/_release`),
+            # relative_to(target) для файлов прямо в ней не содержит
+            # "_release" вовсе, и они попадали бы под валидацию/правку как
+            # обычные — при том что это замороженные релизные артефакты.
+            if "_release" in p.parts:
                 continue
             out.append(p)
         return out
