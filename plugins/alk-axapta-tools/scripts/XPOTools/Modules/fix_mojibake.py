@@ -95,11 +95,12 @@ def gather_files(target: pathlib.Path) -> List[pathlib.Path]:
     if target.is_dir():
         out = []
         for p in sorted(target.rglob("*.xpo")):
-            try:
-                rel_parts = p.relative_to(target).parts
-            except ValueError:
-                rel_parts = (p.name,)
-            if "_release" in rel_parts:
+            # По АБСОЛЮТНЫМ частям пути, не по относительным target: если
+            # цель — сама папка `_release` (`fix-mojibake XPO/_release`),
+            # relative_to(target) для файлов прямо в ней не содержит
+            # "_release" вовсе, и защита от переписывания замороженных
+            # релизных .xpo молча отключалась.
+            if "_release" in p.parts:
                 continue
             out.append(p)
         return out

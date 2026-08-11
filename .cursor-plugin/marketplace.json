@@ -6,7 +6,7 @@
   },
   "metadata": {
     "description": "Инструменты для проектов Microsoft Dynamics AX 2012 (ALK). Cursor Team Marketplace — без Claude-only hooks.",
-    "version": "1.9.15",
+    "version": "1.9.16",
     "pluginRoot": "plugins"
   },
   "plugins": [

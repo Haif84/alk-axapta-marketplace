@@ -249,7 +249,19 @@ def check_param_layout(masked: List[Masked], base: int) -> List[Tuple[int, str]]
     # требуют уже ВСЕ последующие строки.
     after_paren = masked[first].code.split("(", 1)[1].strip() \
         if "(" in masked[first].code else ""
-    start = first + 1 if after_paren else first + 2
+    if after_paren:
+        start = first + 1
+    else:
+        # Первый параметр — на ПЕРВОЙ НЕПУСТОЙ строке после голой '(': пустая
+        # строка или закомментированная (после mask_code — тоже пустая) между
+        # '(' и первым параметром иначе сдвигала бы фиксированный `first + 2`
+        # мимо него, и настоящий первый параметр — законно без ведущей
+        # запятой — сам получал бы ложный WARN.
+        first_param = next(
+            (i for i in range(first + 1, last + 1) if masked[i].code.strip()),
+            first + 1,
+        )
+        start = first_param + 1
     out = []
     for i in range(start, last + 1):
         stripped = masked[i].code.strip()
