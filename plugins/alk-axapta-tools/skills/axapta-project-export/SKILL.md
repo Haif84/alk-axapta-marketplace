@@ -111,14 +111,14 @@ python "$pluginRoot\scripts\XPOTools\Modules\config.py"
 
 Ненулевой exit code → **остановись**, покажи ошибки из stderr, направь пользователя на
 `/alk-axapta-tools:setup`. Без полной конфигурации (`AX_PROJECT_ID`, `AX_USER_NICK`,
-`AX_AOT_PATH`, ровно один из `AX_OBJECT_PREFIX`/`AX_OBJECT_SUFFIX`) `validate-xpo` не
+ровно один из `AX_OBJECT_PREFIX`/`AX_OBJECT_SUFFIX`) `validate-xpo` не
 проверяет маркеры модификаций и не ловит ошибки типа «блок вместо header» — продолжать
 сборку релиза в таком состоянии нельзя.
 
 **Запасной путь** (temporary, не переживает обновление плагина) — если по какой-то причине
 `/alk-axapta-tools:setup` недоступен прямо сейчас, можно вручную создать
 `XPOTools/config.local.json` с теми же ключами (`AX_PROJECT_ID`, `AX_USER_NICK`,
-`AX_AOT_PATH`, `AX_OBJECT_PREFIX`/`AX_OBJECT_SUFFIX`) — но это временная мера, не основной
+`AX_OBJECT_PREFIX`/`AX_OBJECT_SUFFIX`; опционально `AX_AOT_PATH`) — но это временная мера, не основной
 путь; предложи пользователю `setup` в любом случае.
 
 ### 1. Сбор контекста

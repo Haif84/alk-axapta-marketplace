@@ -64,7 +64,9 @@ cd "$env:USERPROFILE\.claude\scripts\XPOTools"
 3. `config.local.json` (gitignored).
 4. `config.example.json` (под git, плейсхолдеры).
 
-Все пять ключей обязательны (`AX_OBJECT_PREFIX`/`AX_OBJECT_SUFFIX` — ровно один из двух);
+Обязательны `AX_PROJECT_ID`, `AX_USER_NICK` и ровно один из
+`AX_OBJECT_PREFIX`/`AX_OBJECT_SUFFIX`; `AX_AOT_PATH` опционален — нужен только
+`sync-xpo`, который сам сообщает об отсутствии пути;
 `Modules/config.py` вызванный напрямую (`python Modules/config.py`) проверяет это и
 возвращает ненулевой exit code при неполной конфигурации — используется как preflight-гейт
 в скиллах плагина.
