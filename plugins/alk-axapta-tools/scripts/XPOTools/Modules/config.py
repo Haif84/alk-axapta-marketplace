@@ -14,8 +14,9 @@
 "AX_OBJECT_PREFIX": "" при заданном суффиксе), поэтому ключ учитывается по факту
 присутствия, а не по непустому значению.
 
-Все пять ключей обязательны (см. validate_config()), кроме пары
-AX_OBJECT_PREFIX/AX_OBJECT_SUFFIX — из них должен быть задан РОВНО ОДИН.
+Обязательны (см. validate_config()): AX_PROJECT_ID, AX_USER_NICK и РОВНО ОДИН
+из пары AX_OBJECT_PREFIX/AX_OBJECT_SUFFIX. AX_AOT_PATH опционален — нужен только
+sync-xpo, который сам сообщает об отсутствии пути в момент использования.
 
 Старые ALK_*-ключи в config.local.json (до переименования в AX_*) мигрируются реально:
 подхватываются как значения новых ключей, старые удаляются, файл переписывается один раз
@@ -156,7 +157,9 @@ def validate_config() -> list[str]:
     cfg = load_config()
     errors = []
 
-    for k in ("AX_PROJECT_ID", "AX_USER_NICK", "AX_AOT_PATH"):
+    # AX_AOT_PATH намеренно не здесь: он нужен только sync-xpo, и тот сам
+    # выдаёт понятную ошибку при отсутствии — глобально блокировать незачем.
+    for k in ("AX_PROJECT_ID", "AX_USER_NICK"):
         v = cfg.get(k, "")
         if not v or placeholder_re.match(v):
             errors.append(f"{k} не задан. Запусти /alk-axapta-tools:setup.")

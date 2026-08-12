@@ -6,12 +6,13 @@
     Writes user-level ENV variables (HKCU\Environment) that XPOTools reads first
     and skills require before work (preflight gate):
       - AX_USER_NICK      - developer nick (mod comments)                 [required]
-      - AX_AOT_PATH       - path to AOT-Prod dump (sync-xpo)              [required]
+      - AX_AOT_PATH       - path to AOT-Prod dump (sync-xpo only)         [optional]
       - AX_PROJECT_ID     - ALK project prefix (e.g. ALK_DEVAX12)         [required]
       - AX_OBJECT_PREFIX  - lowercase identifier affix (alk_)             [exactly one
       - AX_OBJECT_SUFFIX  - postfix alternative to PREFIX                 of these two]
-    All five are required. PREFIX/SUFFIX are mutually exclusive: exactly one
-    must be set.
+    PREFIX/SUFFIX are mutually exclusive: exactly one must be set.
+    AX_AOT_PATH is optional: with a live AX MCP server the offline AOT-Prod
+    dump is only needed by sync-xpo, which reports a clear error itself.
 
     Variables live in the user profile and survive plugin updates. No admin
     rights needed. ENV wins over config.local.json (cache is wiped on update).
@@ -25,7 +26,7 @@
     Developer nick. Required. Example: -UserNick akaz
 
 .PARAMETER AotPath
-    Path to AOT-Prod. Required.
+    Path to AOT-Prod. Optional (needed only by sync-xpo).
     Example: -AotPath "E:\ZeroCoder\Axapta\ERP\AOT-Prod"
 
 .PARAMETER ProjectId
@@ -61,7 +62,6 @@ Write-Host ''
 
 $missing = @()
 if ([string]::IsNullOrWhiteSpace($UserNick))  { $missing += 'UserNick (-UserNick akaz)' }
-if ([string]::IsNullOrWhiteSpace($AotPath))   { $missing += 'AotPath (-AotPath "E:\...\AOT-Prod")' }
 if ([string]::IsNullOrWhiteSpace($ProjectId)) { $missing += 'ProjectId (-ProjectId ALK_DEVAX12)' }
 
 $prefixSet = -not [string]::IsNullOrWhiteSpace($ObjectPrefix)
@@ -132,7 +132,11 @@ if ($legacyFound.Count -gt 0) {
 
 Set-UserEnv 'AX_PROJECT_ID'    $ProjectId
 Set-UserEnv 'AX_USER_NICK'     $UserNick
-Set-UserEnv 'AX_AOT_PATH'      $AotPath
+# AX_AOT_PATH опционален: пустое значение при повторном запуске без -AotPath
+# не должно стирать уже настроенный путь.
+if (-not [string]::IsNullOrWhiteSpace($AotPath)) {
+    Set-UserEnv 'AX_AOT_PATH'  $AotPath
+}
 Set-UserEnv 'AX_OBJECT_PREFIX' $ObjectPrefix
 Set-UserEnv 'AX_OBJECT_SUFFIX' $ObjectSuffix
 
