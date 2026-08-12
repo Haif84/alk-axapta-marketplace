@@ -23,7 +23,7 @@ changeset_apply» в `axapta-mod-comments`).
 
 Сервер держит два канала: поллер X++ (Windows Negotiate, подключает сама
 панель разработчика в AX-клиенте) и MCP-канал (персональный API-ключ,
-`Authorization: Bearer <ключ>` в `.mcp.json`).
+`Authorization: Bearer <ключ>` в MCP-конфиге клиента).
 
 Ключ получить одним из двух равноценных способов:
 - **браузер** — открой `http://<host>:<port>/handshake` (та же корпоративная
@@ -31,9 +31,58 @@ changeset_apply» в `axapta-mod-comments`).
   ключ (показывается один раз);
 - **панель AX** — кнопка/меню MCP в `CIT_DevToolPanel`, тот же принцип.
 
+Автоматизированный браузер (Playwright и аналоги) часто падает на Negotiate
+(`ERR_INVALID_AUTH_CREDENTIALS`). Для выпуска ключа используй системный
+браузер Windows или PowerShell (7+: параметр `-AllowUnencryptedAuthentication`
+есть только в pwsh, Windows PowerShell 5.1 упадёт на нём с parameter not found):
+
+```powershell
+# Проверка, что handshake доступен под текущим пользователем (pwsh 7+)
+Invoke-WebRequest "http://<host>:<port>/handshake" `
+  -UseDefaultCredentials -AllowUnencryptedAuthentication -TimeoutSec 20
+```
+
 Один сервер — одна среда (dev/test/prod, разные порты). Ключ, выпущенный для
 dev-сервера, не работает на test/prod — это разные процессы с разными
 хранилищами ключей.
+
+Типичный MCP-endpoint: `http://<host>:<port>/mcp` (streamable HTTP /
+`text/event-stream`). Пример ответа `initialize`: `serverInfo.name` =
+`axapta-mcp-server`.
+
+### Dual-runtime: куда писать конфиг
+
+| Runtime | Файл | Примечание |
+|---------|------|------------|
+| Claude Code | `<project>/.mcp.json` | Корневой `.mcp.json` проекта |
+| Cursor | `<project>/.cursor/mcp.json` **или** `~/.cursor/mcp.json` | Корневой `.mcp.json` Cursor **не читает** |
+
+Пример (и Claude, и Cursor — одинаковое тело `mcpServers`):
+
+```json
+{
+  "mcpServers": {
+    "axapta-mcp-server": {
+      "url": "http://<host>:<port>/mcp",
+      "headers": {
+        "Authorization": "Bearer <ключ>"
+      }
+    }
+  }
+}
+```
+
+После записи конфига:
+1. **Reload Window** (Cursor) / перезапуск сессии (Claude).
+2. Если IDE спросит — разреши сервер `axapta-mcp-server`.
+3. В каталоге инструментов Cursor имя часто выглядит как
+   `user-axapta-mcp-server` (префикс `user-` от user-level mcp.json) —
+   это тот же сервер.
+4. Проверка: вызови `ax_session_status` (без параметров).
+
+Ключ не коммить: добавь `.mcp.json` и `.cursor/mcp.json` в `.gitignore`.
+Если сервер отвечает на `initialize`, а в агенте tools нет — почти всегда
+неверный путь конфига (Cursor vs Claude), а не «мёртвый» MCP.
 
 ## 2. Карта инструментов и источников данных
 
@@ -185,3 +234,6 @@ changeset_apply → guard на сервере (expectedHash, маркер, чё�
 | `origin: mirror` с `stale: true` | SQL-проверка свежести недоступна — доверяй `exportedAt`, не самому факту наличия файла |
 | `versionMismatch: true` | Панель AX работает на старом коде — переоткрыть панель, не сервер |
 | Пустой `ax_xref_find` на заведомо используемом имени | Скорее всего индекс отстал (недельный batch), не «не используется» — проверь `ax_source_find` |
+| После Reload нет tools `aot_*`/`ax_*` в агенте | Cursor: проверь `.cursor/mcp.json` или `~/.cursor/mcp.json` (не корневой `.mcp.json`); Claude: `.mcp.json`. Reload + approve сервера |
+| Handshake/Playwright: `ERR_INVALID_AUTH_CREDENTIALS` | Negotiate не проходит в headless — системный браузер или PowerShell с `-UseDefaultCredentials -AllowUnencryptedAuthentication` |
+| `initialize` по `/mcp` = 200, а IDE без tools | Ключ и сеть ок; конфиг лежит не в том файле для текущего runtime |
