@@ -78,9 +78,11 @@ XPOTools бандлируется внутри плагина — отдельн
 /alk-axapta-tools:setup
 ```
 
-Скилл запишет `AX_USER_NICK`, `AX_AOT_PATH`, `AX_PROJECT_ID`,
+Скилл запишет `AX_USER_NICK`, `AX_PROJECT_ID`,
 `AX_OBJECT_PREFIX` **или** `AX_OBJECT_SUFFIX` (ровно один). Без них остальные
-скиллы откажутся работать (preflight). После настройки — новая сессия терминала
+скиллы откажутся работать (preflight). `AX_AOT_PATH` (путь к выгрузке AOT-Prod)
+опционален — нужен только `sync-xpo`; при работе через живой MCP-сервер AX
+офлайн-выгрузка не требуется. После настройки — новая сессия терминала
 или Reload Window. Проверка: `$env:AX_USER_NICK`.
 
 ---
