@@ -19,7 +19,10 @@
                       чаще всего попадает туда при массовом переименовании.
   assign-spacing      `a =b` или `a = b ;`. У присваивания пробел с обеих
                       сторон, перед точкой с запятой пробела нет.
-  blank-before-return `return` вплотную к предыдущему оператору.
+  blank-before-return `return` вплотную к предыдущему оператору. Не считается
+                      нарушением, если перед return - открывающая `{`, лишь `;`
+                      или метка `case ... :` / `default :` (то же начало новой
+                      ветки, что и `{`).
   param-layout        2+ параметра в одной строке, либо перенесённый параметр
                       без ведущей запятой. Конвенция: один параметр — в строке
                       с методом; два и более — каждый на своей строке со
@@ -44,6 +47,11 @@ CANONICAL_KEYWORDS = {w: w for w in RESERVED_WORDS}
 ASSIGN_RE = re.compile(r"(?<![=<>!+\-*/])([+\-*/]?=)(?!=)")
 
 RETURN_RE = re.compile(r"^\s*return\b", re.I)
+
+#: `case "X":` / `case Enum::Value :` / `default :` — метка switch-case. Она
+#: открывает новую ветку точно так же, как `{`, поэтому return сразу за ней
+#: не нуждается в пустой строке перед собой (та же категория, что и `{`).
+CASE_LABEL_RE = re.compile(r"^(case\b.*|default)\s*:$")
 
 #: Объявление переменной: `Тип имя;`, `Тип имя = значение;`, `Тип имя[10];`.
 DECL_RE = re.compile(r"^\s*(?P<type>[A-Za-z_]\w*(?:\s+\d+)?)\s+"
@@ -312,7 +320,9 @@ def check_blank_before_return(masked: List[Masked], base: int) -> List[Tuple[int
         if j == 0:
             continue
         prev = masked[j - 1]
-        if not prev.raw.strip() or prev.code.strip().endswith("{") or prev.code.strip() == ";":
+        prev_code = prev.code.strip()
+        if (not prev.raw.strip() or prev_code.endswith("{") or prev_code == ";"
+                or CASE_LABEL_RE.match(prev_code)):
             continue
         out.append((base + k, "blank-before-return: перед `return` нужна пустая строка"))
     return out
