@@ -155,7 +155,7 @@ sync-xpo --task-root .\xpo --bundle .\xpo\_release\SharedProject_*.xpo
 sync-xpo --task-root .\xpo --with-content-diff
 ```
 
-Если `--prod-root` не указан — берётся из ENV-переменной `AX_AOT_PATH` (обязательна, задаётся через скилл `/alk-axapta-tools:setup`; без неё и без явного `--prod-root` команда завершится ошибкой).
+Если `--prod-root` не указан — берётся из ENV-переменной `AX_AOT_PATH` (опциональна, задаётся через скилл `/alk-axapta-tools:setup`; без неё и без явного `--prod-root` команда завершится понятной ошибкой — остальные инструменты плагина от неё не зависят).
 
 Если `--bundle` не указан — автоматически берётся самый свежий `SharedProject_*.xpo` из `<task-root>/_release/`.
 
