@@ -33,10 +33,11 @@ changeset_apply» в `axapta-mod-comments`).
 
 Автоматизированный браузер (Playwright и аналоги) часто падает на Negotiate
 (`ERR_INVALID_AUTH_CREDENTIALS`). Для выпуска ключа используй системный
-браузер Windows или PowerShell:
+браузер Windows или PowerShell (7+: параметр `-AllowUnencryptedAuthentication`
+есть только в pwsh, Windows PowerShell 5.1 упадёт на нём с parameter not found):
 
 ```powershell
-# Проверка, что handshake доступен под текущим пользователем
+# Проверка, что handshake доступен под текущим пользователем (pwsh 7+)
 Invoke-WebRequest "http://<host>:<port>/handshake" `
   -UseDefaultCredentials -AllowUnencryptedAuthentication -TimeoutSec 20
 ```
