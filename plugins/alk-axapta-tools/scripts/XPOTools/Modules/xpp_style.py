@@ -51,7 +51,9 @@ RETURN_RE = re.compile(r"^\s*return\b", re.I)
 #: `case "X":` / `case Enum::Value :` / `default :` — метка switch-case. Она
 #: открывает новую ветку точно так же, как `{`, поэтому return сразу за ней
 #: не нуждается в пустой строке перед собой (та же категория, что и `{`).
-CASE_LABEL_RE = re.compile(r"^(case\b.*|default)\s*:$")
+#: re.I — ключевые слова X++ регистронезависимы (`Case`/`DEFAULT` компилируются),
+#: как и у RETURN_RE выше.
+CASE_LABEL_RE = re.compile(r"^(case\b.*|default)\s*:$", re.I)
 
 #: Объявление переменной: `Тип имя;`, `Тип имя = значение;`, `Тип имя[10];`.
 DECL_RE = re.compile(r"^\s*(?P<type>[A-Za-z_]\w*(?:\s+\d+)?)\s+"

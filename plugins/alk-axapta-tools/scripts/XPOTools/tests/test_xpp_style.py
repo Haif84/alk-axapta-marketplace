@@ -123,6 +123,15 @@ class TestChecks(unittest.TestCase):
                                "        default :\n            return false;\n"
                                "    }\n}"))
 
+    def test_return_after_capitalized_case_label_needs_no_blank_line(self):
+        """Ключевые слова X++ регистронезависимы: `Case`/`Default :` — та же
+        метка switch-case, что и в нижнем регистре."""
+        self.assertNotIn("blank-before-return",
+                         codes('str m()\n{\n    switch (a)\n    {\n'
+                               '        Case "X":\n            return "1";\n'
+                               '        Default :\n            return "";\n'
+                               '    }\n}'))
+
     def test_blank_line_before_return_still_flagged_after_statement(self):
         """Регрессия: смягчение для case/default не должно проглатывать
         настоящее нарушение - return вплотную к обычному оператору."""
