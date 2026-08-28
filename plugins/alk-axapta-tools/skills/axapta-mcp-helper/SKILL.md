@@ -295,10 +295,13 @@ ack: operationId, status=in_progress, confirmation="auto"|"manual" →
 сами добавляют успешно применённые/импортированные объекты в текущий проект
 по умолчанию — итог в поле ответа `project: {name, added, reason?}`.
 `reason` появляется, если добавить не удалось (чаще всего — проект по
-умолчанию не назначен: `startupProject` пуст). Если объекты должны попасть в
-конкретный релизный проект (`axapta-project-export`), убедись ПЕРЕД сессией
-правок, что нужный проект — дефолтный (`ax_project_status`/
-`ax_project_set_default`), иначе они будут падать не туда.
+умолчанию не назначен: `startupProject` пуст).
+
+Целевой проект — всегда `AX_AOT_PROJECT` из `.axapta.json` (тот же, что
+потом забирает `axapta-project-export`). Перед **каждым** apply/import: если
+связка Shared + запись CIT готова — `ax_project_set_default`; если нет —
+доведи её по таблице §3b. Иначе объекты молча окажутся в чужом
+SharedProject текущей сессии AX.
 
 ## 4. Известные ловушки живого AOT
 
