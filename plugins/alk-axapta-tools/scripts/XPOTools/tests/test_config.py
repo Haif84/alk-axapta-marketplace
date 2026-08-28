@@ -56,5 +56,47 @@ class TestAotPathOptional(unittest.TestCase):
         self.assertFalse(any("AX_AOT_PATH" in e for e in errors))
 
 
+class TestModificationCommentForm(unittest.TestCase):
+    def test_dax_hyphen(self):
+        self.assertEqual(config.modification_comment_form("DAX-12768"), "DAX_012768")
+
+    def test_dax_underscore_padded(self):
+        self.assertEqual(config.modification_comment_form("DAX_012579"), "DAX_012579")
+
+    def test_dax_leading_zeros_stripped_then_padded(self):
+        self.assertEqual(config.modification_comment_form("DAX-0011233"), "DAX_011233")
+
+    def test_mod_app_untouched(self):
+        self.assertEqual(config.modification_comment_form("MOD-240-APP"), "MOD-240-APP")
+
+
+class TestAotProjectName(unittest.TestCase):
+    def _cfg(self, **kwargs):
+        base = {
+            "AX_PROJECT_ID": "ALK_DEVAX12",
+            "AX_USER_NICK": "akaz",
+            "AX_MODIFICATION_ID": "DAX-12579",
+            "AX_AOT_PROJECT": "",
+        }
+        base.update(kwargs)
+        return base
+
+    def test_derived_dax(self):
+        self.assertEqual(
+            config.aot_project_name(self._cfg()),
+            "ALK_DEVAX12_DAX_012579_akaz",
+        )
+
+    def test_explicit_wins(self):
+        self.assertEqual(
+            config.aot_project_name(self._cfg(
+                AX_AOT_PROJECT="ALK_CDT000_MOD_240_APP_MCPServer_akaz")),
+            "ALK_CDT000_MOD_240_APP_MCPServer_akaz",
+        )
+
+    def test_missing_mod_empty(self):
+        self.assertEqual(config.aot_project_name(self._cfg(AX_MODIFICATION_ID="")), "")
+
+
 if __name__ == "__main__":
     unittest.main()
