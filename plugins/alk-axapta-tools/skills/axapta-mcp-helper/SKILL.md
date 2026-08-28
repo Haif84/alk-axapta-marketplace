@@ -1,7 +1,7 @@
 ---
 name: axapta-mcp-helper
 description: |
-  Работа через живой MCP-сервер Dynamics AX 2012 (инструменты aot_*/ax_*/changeset_apply — сервер `axapta-mcp-server`, не офлайн-выгрузка xpo). Применяй ВСЕГДА, когда доступны эти инструменты и задача — прочитать/поправить/скомпилировать что-то в AOT через них: подключение и выпуск персонального ключа, выбор источника (live/зеркало/офлайн xpo), полный жизненный цикл changeset_apply и реакция на каждую его ветку, известные ловушки (самомодификация, expectedHash, компиляция мимо записи), multi-user диагностика, работа без AX-клиента (консультантский режим).
+  Работа через живой MCP-сервер Dynamics AX 2012 (инструменты aot_*/ax_*/changeset_apply — сервер `axapta-mcp-server`, не офлайн-выгрузка xpo). Применяй ВСЕГДА, когда доступны эти инструменты и задача — прочитать/поправить/скомпилировать что-то в AOT через них: подключение и выпуск персонального ключа, выбор источника (live/зеркало/офлайн xpo), полный жизненный цикл changeset_apply и реакция на каждую его ветку, все варианты связки записи реестра CIT_ProjectJobTable с Shared-проектом AOT (есть/нет каждой сущности), известные ловушки (самомодификация, expectedHash, компиляция мимо записи), multi-user диагностика, работа без AX-клиента (консультантский режим).
 ---
 
 # Axapta MCP Helper
@@ -110,7 +110,7 @@ Cursor не поддерживает CLI для этого и не везде р
 |-------|-------------|------------------------|
 | Работают всегда | `ax_source_find` (зеркало+ripgrep), `ax_xref_find` (SQL) | Нет, если включены Mirror/Sql на сервере |
 | Предпочитают live, падают в зеркало | `aot_get_source`, `aot_exists` | Нет при включённом Mirror — иначе да |
-| Только live | `ax_compile*`, `ax_run_job`, `ax_test_run`, `changeset_apply`, `aot_get_property`, `ax_import_xpo`, `ax_project_status`, `ax_project_set_default`, `ax_project_add_objects`, `ax_project_create`, остальные | Да, без исключений |
+| Только live | `ax_compile*`, `ax_run_job`, `ax_test_run`, `changeset_apply`, `aot_get_property`, `ax_import_xpo`, `ax_project_status`, `ax_project_set_default`, `ax_project_add_objects`, `ax_project_create`, `ax_project_job_update`, остальные | Да, без исключений |
 
 Без живого поллера и без Mirror/Sql инструменты «только live» отвечают
 СРАЗУ понятной ошибкой («требует живого поллера…»), не таймаутом на
@@ -135,7 +135,12 @@ changeset'а.
 ## 3. Жизненный цикл `changeset_apply`
 
 ```
-aot_get_source (без methodName) → hash считает сам инструмент (кэш) →
+если AOT-проект задачи УЖЕ существует (+ запись реестра с ProjectNodeName):
+  ax_project_set_default(projectName = AX_AOT_PROJECT)  ← перед каждой записью
+  → ax_project_status (startupProject == AX_AOT_PROJECT)
+иначе — довести связку до готовой (см. §3b — там же таблица всех вариантов
+«запись есть/нет» × «Shared есть/нет», set_default ТОЛЬКО в конце)
+→ aot_get_source (без methodName) → hash считает сам инструмент (кэш) →
 маркер модификации в Source (см. axapta-mod-comments) →
 changeset_apply → guard на сервере (expectedHash, маркер, чёрный список) →
 ack: operationId, status=in_progress, confirmation="auto"|"manual" →
@@ -143,6 +148,28 @@ ack: operationId, status=in_progress, confirmation="auto"|"manual" →
 (только если confirmation="manual") → опрашивай ax_operation_status,
 пока не придёт финальный статус
 ```
+
+**Проект по умолчанию — перед записью, когда связка уже готова.**
+`changeset_apply` / `ax_import_xpo` с `addToProject: true` кладут объекты в
+*текущий* `xUserInfo.startupProject` сессии AX. Дефолт легко уезжает на
+чужой тикет. Имя цели — `AX_AOT_PROJECT` из `.axapta.json` (если пуст —
+`config.aot_project_name()`).
+
+**Перед каждым** `changeset_apply` / `ax_import_xpo`:
+
+1. Возьми `AX_AOT_PROJECT`.
+2. Проверь готовность: Shared в AOT есть и `ax_project_job_find` находит
+   запись с этим `ProjectNodeName`. `ax_project_set_default` на «пустом»
+   месте упадёт («запись не найдена»).
+3. **Если всё уже есть** — `ax_project_set_default(projectName: …)` (или
+   `projectCode`+`projectJob`), сверь `startupProject`.
+4. **Если связки ещё нет** — **не** звать `set_default` раньше времени.
+   Доведи её строго по таблице вариантов в §3b — там же инструмент под
+   каждую комбинацию «запись реестра есть/нет» × «Shared есть/нет».
+   Только когда связка готова — запись объектов в AOT.
+
+Не полагайся на «выставлял в начале сессии». В ответе apply смотри
+`project: {name, added}`: `name` ≠ `AX_AOT_PROJECT` — стоп.
 
 Финальный статус — не мгновенный: между `changeset_apply` (guard) и записью
 проходит как минимум один тик поллера, а если открылась форма предпросмотра —
@@ -206,28 +233,61 @@ ack: operationId, status=in_progress, confirmation="auto"|"manual" →
 
 ## 3b. Работа с AOT-проектами (`ax_project_*`)
 
-- `ax_project_status` — прочитать, какой проект сейчас по умолчанию
-  (`xUserInfo.startupProject`), существует ли он и сколько в нём объектов
-  (грубая оценка). Дёшево, вызывай перед `changeset_apply`/`ax_import_xpo`,
-  если непонятно, куда попадут объекты.
-- `ax_project_set_default` — переключить проект по умолчанию на уже
-  существующий (по `projectCode`+`projectJob` записи реестра ИЛИ по имени
-  AOT-проекта).
-- `ax_project_add_objects` — добавить явный список объектов в текущий проект
-  по умолчанию, без диалога.
-- `ax_project_create` — создать НОВЫЙ проект под запись реестра, у которой
-  ещё нет `ProjectNodeName` (проверь `ax_project_job_find` сначала).
-  Интерактивный (диалог подтверждения, тот же принцип, что у
+Канонический порядок заведения НОВОЙ задачи (ALK), когда нет ни записи
+реестра, ни Shared:
+
+1. **Shared AOT-проект** с именем `AX_AOT_PROJECT`: если узел уже есть —
+   использовать его; иначе создать.
+2. **Запись `CIT_ProjectJobTable`** — если ещё нет:
+   `ax_project_job_create` с `projectNodeName` = имя этого Shared.
+3. **Текущий проект** — `ax_project_set_default` на него.
+
+Но задача редко начинается с полного нуля. Таблица ниже называет инструмент
+для КАЖДОЙ комбинации «запись реестра есть/нет» × «Shared в AOT есть/нет» ×
+«уже связаны ли они полем `ProjectNodeName`» — не гадай по аналогии, сверяйся
+с ней:
+
+| # | Запись реестра (`CIT_ProjectJobTable`) | Shared в AOT | Связаны (`ProjectNodeName`) | Что делать |
+|---|-----------------------------------------|--------------|--------------------------------|------------|
+| 1 | нет | нет | — | `ax_project_job_create` (без `projectNodeName`) → `ax_project_create` (создаёт НОВЫЙ пустой Shared и сразу ставит дефолт) |
+| 2 | нет | есть | — | `ax_project_job_create` сразу с `projectNodeName` = имя существующего Shared → `ax_project_set_default` |
+| 3 | есть | нет | — (поле пусто) | `ax_project_create` (создаёт НОВЫЙ Shared под эту запись и сразу ставит дефолт) |
+| 4 | есть | есть | нет (поле пусто) | `ax_project_job_update(projectNodeName: …)` — привязать уже существующий Shared, НЕ создавая новый → `ax_project_set_default` |
+| 5 | есть | есть | да, на этот же Shared | ничего заводить не нужно — сразу `ax_project_set_default` |
+| 6 | есть | есть | да, но на ДРУГОЙ Shared | осознанная перепривязка: `ax_project_job_update(projectNodeName: …, force: true)` → `ax_project_set_default` |
+
+Инструменты:
+
+- `ax_project_status` — какой проект сейчас по умолчанию
+  (`xUserInfo.startupProject`), существует ли он, оценка числа объектов.
+  Дёшево, вызывай перед `changeset_apply`/`ax_import_xpo`, если непонятно,
+  куда попадут объекты.
+- `ax_project_set_default` — сделать уже существующую связку (реестр +
+  Shared) проектом по умолчанию (по `projectCode`+`projectJob` ИЛИ по имени
+  AOT-проекта). Звать **после** того, как связка готова (строки 1–6 выше), и
+  снова перед каждым `changeset_apply` / `ax_import_xpo`.
+- `ax_project_add_objects` — явный список объектов в текущий дефолтный
+  проект, без диалога.
+- `ax_project_job_create` / `ax_project_job_find` — запись реестра
+  (`projectCode`+`projectJob`, опционально `projectNodeName`). `_create`
+  только ВСТАВЛЯЕТ новую запись — откажет, если она уже есть (строки 3–6),
+  обновлять существующую им нельзя.
+- `ax_project_create` — создать НОВЫЙ Shared под запись реестра, у которой
+  `ProjectNodeName` ещё пуст (строки 1, 3; проверь `ax_project_job_find`
+  сначала). Интерактивный (диалог подтверждения, тот же принцип, что у
   `ax_project_job_create`). Создаёт **пустой** проект — без стандартного
   набора групп (Tables/Classes/Forms/Security...): реальные группы
   появляются сами по мере добавления объектов.
+- `ax_project_job_update` — привязать УЖЕ СУЩЕСТВУЮЩИЙ Shared к УЖЕ
+  СУЩЕСТВУЮЩЕЙ записи реестра (строки 4, 6), не создавая новый Shared — в
+  этом отличие от `ax_project_create`. Тихая запись, диалога не открывает.
+  Откажет, если `ProjectNodeName` уже заполнен (перезапись — только с
+  `force: true`), и откажет, если указанный Shared не найден в AOT.
 
 «Запись реестра» здесь — реестр разработок ALK: запись идентифицируется
 парой `projectCode`+`projectJob`, а привязка к AOT хранится в её поле
-`ProjectNodeName`. Инструменты реестра `ax_project_job_find` (найти запись
-и её привязку) и `ax_project_job_create` (завести новую запись,
-интерактивный) в этом скилле подробно не описаны — актуальные параметры
-смотри в описаниях самих инструментов в каталоге MCP-сервера.
+`ProjectNodeName`. Актуальность параметров всех перечисленных инструментов —
+в их описаниях в каталоге MCP-сервера.
 
 ## 3c. Автодобавление в проект по умолчанию
 
@@ -235,10 +295,13 @@ ack: operationId, status=in_progress, confirmation="auto"|"manual" →
 сами добавляют успешно применённые/импортированные объекты в текущий проект
 по умолчанию — итог в поле ответа `project: {name, added, reason?}`.
 `reason` появляется, если добавить не удалось (чаще всего — проект по
-умолчанию не назначен: `startupProject` пуст). Если объекты должны попасть в
-конкретный релизный проект (`axapta-project-export`), убедись ПЕРЕД сессией
-правок, что нужный проект — дефолтный (`ax_project_status`/
-`ax_project_set_default`), иначе они будут падать не туда.
+умолчанию не назначен: `startupProject` пуст).
+
+Целевой проект — всегда `AX_AOT_PROJECT` из `.axapta.json` (тот же, что
+потом забирает `axapta-project-export`). Перед **каждым** apply/import: если
+связка Shared + запись CIT готова — `ax_project_set_default`; если нет —
+доведи её по таблице §3b. Иначе объекты молча окажутся в чужом
+SharedProject текущей сессии AX.
 
 ## 4. Известные ловушки живого AOT
 
