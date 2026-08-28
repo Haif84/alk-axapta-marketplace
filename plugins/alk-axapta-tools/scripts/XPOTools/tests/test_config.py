@@ -69,6 +69,31 @@ class TestModificationCommentForm(unittest.TestCase):
     def test_mod_app_untouched(self):
         self.assertEqual(config.modification_comment_form("MOD-240-APP"), "MOD-240-APP")
 
+    def test_lowercase_prefix_uppercased(self):
+        """Коды модификаций ALK всегда UPPERCASE — как бы их ни набрали."""
+        self.assertEqual(config.modification_comment_form("dax-12768"), "DAX_012768")
+
+
+class TestModificationMarker(unittest.TestCase):
+    def test_marker_uses_comment_form(self):
+        """В маркере — comment-форма кода (DAX_012579), даже если в конфиге
+        settings-форма (DAX-12579)."""
+        cfg = {
+            "AX_PROJECT_ID": "ALK_DEVAX12",
+            "AX_MODIFICATION_ID": "DAX-12579",
+            "AX_MODIFICATION_DESC": "Тестовое описание",
+            "AX_USER_NICK": "akaz",
+        }
+        with mock.patch.object(config, "load_config", return_value=cfg):
+            self.assertEqual(
+                config.modification_marker("28.08.2026"),
+                "// ALK_DEVAX12, DAX_012579, Тестовое описание, 28.08.2026, akaz",
+            )
+            self.assertEqual(
+                config.modification_marker("28.08.2026", inline=True),
+                "//ALK_DEVAX12, DAX_012579, Тестовое описание, 28.08.2026, akaz",
+            )
+
 
 class TestAotProjectName(unittest.TestCase):
     def _cfg(self, **kwargs):

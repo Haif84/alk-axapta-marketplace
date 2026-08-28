@@ -95,13 +95,16 @@ _DAX_STYLE_MOD_RE = re.compile(r"^([A-Za-z]+)[_-]0*(\d+)$")
 def modification_comment_form(raw: str) -> str:
     """Canonical-comment форма кода модификации для маркеров и имени AOT-проекта.
 
-    DAX-12768 / DAX_012768 / DAX-0012768 → DAX_012768.
+    DAX-12768 / DAX_012768 / DAX-0012768 / dax-12768 → DAX_012768.
+    Префикс приводится к верхнему регистру (коды модификаций ALK всегда
+    UPPERCASE — маркеры и имена AOT-проектов единообразны независимо от
+    того, как код набрали в .axapta.json).
     MOD-240-APP и прочие не-PREFIX-N строки возвращаются как есть.
     """
     s = (raw or "").strip()
     m = _DAX_STYLE_MOD_RE.fullmatch(s)
     if m:
-        return f"{m.group(1)}_{int(m.group(2)):06d}"
+        return f"{m.group(1).upper()}_{int(m.group(2)):06d}"
     return s
 
 
