@@ -222,6 +222,13 @@ ack: operationId, status=in_progress, confirmation="auto"|"manual" →
   набора групп (Tables/Classes/Forms/Security...): реальные группы
   появляются сами по мере добавления объектов.
 
+«Запись реестра» здесь — реестр разработок ALK: запись идентифицируется
+парой `projectCode`+`projectJob`, а привязка к AOT хранится в её поле
+`ProjectNodeName`. Инструменты реестра `ax_project_job_find` (найти запись
+и её привязку) и `ax_project_job_create` (завести новую запись,
+интерактивный) в этом скилле подробно не описаны — актуальные параметры
+смотри в описаниях самих инструментов в каталоге MCP-сервера.
+
 ## 3c. Автодобавление в проект по умолчанию
 
 И `changeset_apply`, и `ax_import_xpo` по умолчанию (`addToProject: true`)
