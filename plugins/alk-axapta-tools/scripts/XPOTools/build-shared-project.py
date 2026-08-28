@@ -19,7 +19,7 @@ from typing import Dict, List, Tuple
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent / "Modules"))
 from xpo_types import XPO_TYPES, detect_menuitem_subtype, name_re_for  # noqa: E402
-from config import load_config, validate_config, print_config_warnings  # noqa: E402
+from config import aot_project_name, load_config, validate_config, print_config_warnings  # noqa: E402
 
 if sys.platform == "win32":
     # reconfigure(), не пересоздание TextIOWrapper: при импорте нескольких таких
@@ -395,13 +395,15 @@ def main() -> int:
         print(f"ERROR: --root не существует: {root}", file=sys.stderr)
         return 2
 
-    project_name = args.project_name
+    project_name = args.project_name or aot_project_name(cfg)
     if not project_name:
-        prefix = cfg.get("AX_PROJECT_ID", "")
-        if not prefix or "<" in prefix:
-            print("ERROR: --project-name не указан и не выводится из config", file=sys.stderr)
-            return 2
-        project_name = prefix + "_<TICKET>"
+        print(
+            "ERROR: --project-name не указан и не выводится из config "
+            "(нужны AX_PROJECT_ID, AX_MODIFICATION_ID, AX_USER_NICK "
+            "или явный AX_AOT_PROJECT)",
+            file=sys.stderr,
+        )
+        return 2
     if "<" in project_name:
         print("ERROR: --project-name содержит плейсхолдер: " + project_name, file=sys.stderr)
         return 2

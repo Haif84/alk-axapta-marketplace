@@ -90,7 +90,7 @@ python "$pluginRoot\scripts\XPOTools\build-shared-project.py" --root .\XPO ...
 
 | Параметр | Источник | Пример |
 |----------|----------|--------|
-| `<AOTProjectName>` | По умолчанию `<AX_PROJECT_ID>_<ModCode>_<AX_USER_NICK>` — код проекта из ENV/memory, код модификации в canonical-comment форме (`DAX_NNNNNN`, подчёркивание, 6 цифр — см. `axapta-mod-comments` §«Нормализация»), ник тоже из ENV/memory | `ALK_DEVAX12_DAX_012234_akaz` |
+| `<AOTProjectName>` | `config.aot_project_name()`: `{AX_PROJECT_ID}_{ModCode}_{AX_USER_NICK}`. Код модификации в canonical-comment форме (`DAX_NNNNNN`, подчёркивание, 6 цифр — см. `axapta-mod-comments` §«Нормализация»). Явный `AX_AOT_PROJECT` в `.axapta.json` перекрывает вывод. Пример: `ALK_DEVAX12_DAX_012579_akaz` | `ALK_DEVAX12_DAX_012234_akaz` |
 | `<YYYYMMDD>` | Системная дата (`Get-Date -Format yyyyMMdd`) | `20260508` |
 | `<HHMM>` | Системное время (`Get-Date -Format HHmm`) | `1430` |
 | `<Origin>` GUID | Сгенерировать новый при первой сборке проекта; для повторной — взять из предыдущей выгрузки | `{9D28BF0C-8A7C-416E-A95D-CD64E7397797}` |
@@ -129,17 +129,18 @@ python "$pluginRoot\scripts\XPOTools\Modules\config.py"
 
 ### 2. Подтверждение имени AOT Project
 
-Собери имя по умолчанию как `<AX_PROJECT_ID>_<ModCode>_<AX_USER_NICK>`:
-- `<AX_PROJECT_ID>` — из ENV/memory (`ALK_DEVAX12`);
+Собери имя по умолчанию через `config.aot_project_name()` — это
+`<AX_PROJECT_ID>_<ModCode>_<AX_USER_NICK>`:
+- `<AX_PROJECT_ID>` — из ENV/`.axapta.json` (`ALK_DEVAX12`);
 - `<ModCode>` — код модификации в **canonical-comment форме** (`DAX_NNNNNN`, подчёркивание,
   6 цифр с ведущими нулями — та же форма, что в маркерах кода, см. `axapta-mod-comments`
   §«Нормализация кода модификации»), НЕ canonical-settings форма (`DAX-N`, дефис) — settings-форма
-  только для хранения в memory, в имени проекта не используется;
+  только для хранения в `.axapta.json`/memory, в имени проекта не используется;
   - для чекпоинта в многофазном проекте без отдельного тикет-кода — код текущей фазы/задачи,
     как он зафиксирован в `project_current_modification.md`;
-- `<AX_USER_NICK>` — из ENV/memory (`akaz`).
+- `<AX_USER_NICK>` — из ENV/`.axapta.json` (`akaz`).
 
-Пример: `ALK_DEVAX12_DAX_012234_akaz`. Через `AskUserQuestion` предложи это имя по умолчанию,
+Пример: `ALK_DEVAX12_DAX_012579_akaz`. Через `AskUserQuestion` предложи это имя по умолчанию,
 дай возможность переопределить (например, если у заказчика принят другой формат).
 
 ### 3. Сканирование объектов

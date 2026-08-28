@@ -40,6 +40,7 @@ from __future__ import annotations
 import json
 import os
 import pathlib
+import re
 
 #: Ключи уровня МАШИНЫ: одинаковы для всех задач разработчика.
 MACHINE_KEYS = (
@@ -55,9 +56,11 @@ MACHINE_KEYS = (
 #: подставятся в соседнем репозитории, где модификация уже другая.
 #:
 #: Из них собирается мод-маркер целиком:
-#:   //{AX_PROJECT_ID}, {AX_MODIFICATION_ID}, {AX_MODIFICATION_DESC}, {дата}, {AX_USER_NICK}
-#: а AX_AOT_PROJECT даёт имя AOT-проекта для сборки релиза. Вывести его из
-#: AX_PROJECT_ID нельзя: смысловая часть имени и ник произвольные.
+#:   //{AX_PROJECT_ID}, {comment-форма AX_MODIFICATION_ID}, {AX_MODIFICATION_DESC}, {дата}, {AX_USER_NICK}
+#: Имя AOT-проекта по умолчанию выводится функцией aot_project_name():
+#:   {AX_PROJECT_ID}_{DAX_NNNNNN}_{AX_USER_NICK}
+#:   пример: ALK_DEVAX12_DAX_012579_akaz
+#: Явный AX_AOT_PROJECT в .axapta.json перекрывает вывод (CDT со смысловой частью).
 MODIFICATION_KEYS = (
     "AX_AOT_PROJECT",
     "AX_MODIFICATION_ID",
@@ -83,6 +86,51 @@ _ROOT = pathlib.Path(__file__).resolve().parent.parent  # XPOTools/
 # Конфиг уровня папки проекта. Ищется вверх от CWD — так он работает и когда
 # инструмент запускают из подкаталога репозитория.
 PROJECT_CONFIG_NAME = ".axapta.json"
+
+_PLACEHOLDER_RE = re.compile(r"^<.*>$")
+# Чистый PREFIX-N (DAX-12768, DAX_012768). Не трогает MOD-240-APP и прочие суффиксы.
+_DAX_STYLE_MOD_RE = re.compile(r"^([A-Za-z]+)[_-]0*(\d+)$")
+
+
+def modification_comment_form(raw: str) -> str:
+    """Canonical-comment форма кода модификации для маркеров и имени AOT-проекта.
+
+    DAX-12768 / DAX_012768 / DAX-0012768 / dax-12768 → DAX_012768.
+    Префикс приводится к верхнему регистру (коды модификаций ALK всегда
+    UPPERCASE — маркеры и имена AOT-проектов единообразны независимо от
+    того, как код набрали в .axapta.json).
+    MOD-240-APP и прочие не-PREFIX-N строки возвращаются как есть.
+    """
+    s = (raw or "").strip()
+    m = _DAX_STYLE_MOD_RE.fullmatch(s)
+    if m:
+        return f"{m.group(1).upper()}_{int(m.group(2)):06d}"
+    return s
+
+
+def aot_project_name(cfg: dict | None = None) -> str:
+    """Имя AOT SharedProject: {AX_PROJECT_ID}_{DAX_NNNNNN}_{nick}.
+
+    Непустой AX_AOT_PROJECT (не плейсхолдер) побеждает — для CDT-имён
+    вроде ALK_CDT000_MOD_240_APP_MCPServer_akaz. Иначе собирается из
+    проекта, comment-формы модификации и ника.
+    """
+    if cfg is None:
+        cfg = load_config()
+    explicit = (cfg.get("AX_AOT_PROJECT") or "").strip()
+    if explicit and not _PLACEHOLDER_RE.match(explicit):
+        return explicit
+
+    project = (cfg.get("AX_PROJECT_ID") or "").strip()
+    nick = (cfg.get("AX_USER_NICK") or "").strip()
+    mod = modification_comment_form(cfg.get("AX_MODIFICATION_ID") or "")
+    if (not project or not nick or not mod
+            or _PLACEHOLDER_RE.match(project)
+            or _PLACEHOLDER_RE.match(nick)
+            or _PLACEHOLDER_RE.match(mod)):
+        return ""
+
+    return f"{project}_{mod}_{nick}"
 
 
 def find_project_config(start: pathlib.Path | None = None) -> pathlib.Path | None:
@@ -152,8 +200,6 @@ def validate_config() -> list[str]:
     """Возвращает список БЛОКИРУЮЩИХ ошибок конфигурации.
     Пустой список = все обязательные значения заданы, можно продолжать.
     Плейсхолдеры вида '<...>' (из config.example.json) считаются незаполненными."""
-    import re
-    placeholder_re = re.compile(r"^<.*>$")
     cfg = load_config()
     errors = []
 
@@ -161,13 +207,13 @@ def validate_config() -> list[str]:
     # выдаёт понятную ошибку при отсутствии — глобально блокировать незачем.
     for k in ("AX_PROJECT_ID", "AX_USER_NICK"):
         v = cfg.get(k, "")
-        if not v or placeholder_re.match(v):
+        if not v or _PLACEHOLDER_RE.match(v):
             errors.append(f"{k} не задан. Запусти /alk-axapta-tools:setup.")
 
     prefix = cfg.get("AX_OBJECT_PREFIX", "")
     suffix = cfg.get("AX_OBJECT_SUFFIX", "")
-    prefix_set = bool(prefix) and not placeholder_re.match(prefix)
-    suffix_set = bool(suffix) and not placeholder_re.match(suffix)
+    prefix_set = bool(prefix) and not _PLACEHOLDER_RE.match(prefix)
+    suffix_set = bool(suffix) and not _PLACEHOLDER_RE.match(suffix)
     if not prefix_set and not suffix_set:
         errors.append(
             "Ни AX_OBJECT_PREFIX, ни AX_OBJECT_SUFFIX не заданы — нужен ровно один. "
@@ -183,25 +229,34 @@ def validate_config() -> list[str]:
 
 
 def validate_modification() -> list[str]:
-    """Ошибки по ключам уровня ЗАДАЧИ (AX_AOT_PROJECT и параметры маркера).
+    """Ошибки по ключам уровня ЗАДАЧИ (маркер и имя AOT-проекта).
 
     Отдельно от validate_config намеренно: без них прекрасно работают чтение
     и раскладка xpo, а нужны они только там, где ставится мод-маркер или
     собирается релиз. Делать их глобально обязательными значило бы ломать
     сценарии, которым они не нужны.
+
+    AX_AOT_PROJECT можно не задавать: если есть проект, код мод и ник,
+    имя собирает aot_project_name() (ALK_DEVAX12_DAX_012579_akaz).
     """
-    import re
-    placeholder_re = re.compile(r"^<.*>$")
     cfg = load_config()
     errors = []
 
-    for k in MODIFICATION_KEYS:
+    for k in ("AX_MODIFICATION_ID", "AX_MODIFICATION_DESC"):
         v = cfg.get(k, "")
-        if not v or placeholder_re.match(v):
+        if not v or _PLACEHOLDER_RE.match(v):
             errors.append(
                 f"{k} не задан — нужен для мод-маркеров и сборки релиза. "
                 f"Задай в .axapta.json проекта (см. /alk-axapta-tools:setup)."
             )
+
+    if not aot_project_name(cfg):
+        errors.append(
+            "AX_AOT_PROJECT не задан и не выводится "
+            "(нужны AX_PROJECT_ID, AX_MODIFICATION_ID, AX_USER_NICK). "
+            "Задай в .axapta.json или дополни машинный конфиг "
+            "(см. /alk-axapta-tools:setup)."
+        )
 
     return errors
 
@@ -213,13 +268,17 @@ def modification_marker(date_str: str, inline: bool = False) -> str:
     каждой сессии, и код проекта успел разъехаться с реальным (в одном
     репозитории 24 маркера ушли под неверным кодом).
 
+    Код модификации в маркере — comment-форма (DAX_012768), не settings
+    (DAX-12768). См. modification_comment_form().
+
     Пробел после `//` зависит от места: в шапке объекта и в блоках `+/-`
     маркер стоит отдельной строкой и пишется как `// CIT000, …`, а хвостовой
     комментарий у одиночной вставленной строки — слитно, `код; //CIT000, …`.
     inline=True даёт вторую форму.
     """
     cfg = load_config()
-    return (f"//{'' if inline else ' '}{cfg['AX_PROJECT_ID']}, {cfg['AX_MODIFICATION_ID']}, "
+    mod_id = modification_comment_form(cfg.get("AX_MODIFICATION_ID") or "")
+    return (f"//{'' if inline else ' '}{cfg['AX_PROJECT_ID']}, {mod_id}, "
             f"{cfg['AX_MODIFICATION_DESC']}, {date_str}, {cfg['AX_USER_NICK']}")
 
 
@@ -245,6 +304,9 @@ if __name__ == "__main__":
     print("[задача — из .axapta.json]")
     for k in MODIFICATION_KEYS:
         print(f"  {k} = {cfg[k]!r}")
+    derived = aot_project_name(cfg)
+    if derived and (cfg.get("AX_AOT_PROJECT") or "") != derived:
+        print(f"  (AOT-проект выведен) {derived}")
 
     errors = validate_config()
     if errors:
