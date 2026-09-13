@@ -9,6 +9,24 @@ Microsoft Dynamics AX 2012 (ALK). Один репозиторий обслужи
 
 Клонировать репозиторий и копировать кэш плагинов **не нужно**.
 
+## Кому нужен этот плагин
+
+`axapta-mcp-server` теперь сам отдаёт инструкцию по работе с собой через
+MCP-инструмент `mcp_guide(audience)` — этот плагин её больше не дублирует.
+
+- **AX2012-разработчикам** (с установленным AX-клиентом, работают с офлайн
+  `.xpo`, маркерами модификаций, сборкой релиза) — плагин `alk-axapta-tools`
+  по-прежнему нужен: он даёт скиллы, которых на сервере нет (`setup`,
+  `axapta-mod-comments`, `axapta-project-export/manage`, `axapta-xpo-helper`,
+  `axapta-trace-helper`) плюс ALK-специфичные надстройки поверх MCP
+  (`axapta-mcp-helper` — проектный реестр `CIT_ProjectJobTable`, диагностика
+  IDE).
+- **Консультантам, аналитикам, разработчикам D365FO/Loyalty** — если вам
+  нужно только читать зеркало/SQL через MCP без AX-клиента, плагин ставить
+  **не обязательно**: подключитесь к `axapta-mcp-server` напрямую (см. его
+  README/раздел подключения) и вызовите `mcp_guide(audience="mirror-consumer")`
+  — это и есть исчерпывающая инструкция для вашего сценария.
+
 ## Состав
 
 | Плагин | Claude Code | Cursor Team Marketplace | Назначение |
@@ -28,7 +46,7 @@ Microsoft Dynamics AX 2012 (ALK). Один репозиторий обслужи
 | `axapta-project-manage` | Organize/flatten/sync/cleanup папки `XPO/` |
 | `axapta-xpo-helper` | Resource BINARY (xlsx→xpo) + конвенции `XMLExcelReport_RU` |
 | `axapta-trace-helper` | Профилирование клиента AX родной трассировкой: горячие методы, стек по `AxNestLevel`, RPC, зависшие вызовы |
-| `axapta-mcp-helper` | Работа через живой MCP-сервер AX (`aot_*`/`ax_*`/`changeset_apply`): подключение, источники данных, жизненный цикл записи, известные ловушки |
+| `axapta-mcp-helper` | Работа через живой MCP-сервер AX (`aot_*`/`ax_*`/`changeset_apply`): подключение (IDE-специфика), проектный реестр, известные ловушки. Общая инструкция по серверу — `mcp_guide(audience)` на самом сервере, не здесь |
 
 XPOTools бандлируется внутри плагина — отдельная установка PATH не нужна.
 Предусловие на машине: **Python ≥ 3.9** и доступ к боевой выгрузке AOT-Prod.
