@@ -7,8 +7,9 @@ const path = require('path');
 
 function defaultHome() { return process.env.USERPROFILE || process.env.HOME; }
 
-// Слаг папки в ~/.claude/projects: путь рабочей папки с заменой : \ / на дефис.
-const slugOf = cwd => cwd.replace(/[:\\/]/g, '-').replace(/^-/, '');
+// Слаг папки в ~/.claude/projects: путь рабочей папки, где всё, кроме латиницы
+// и цифр, заменено дефисом — как делает Claude Code (01_Tools -> 01-Tools).
+const slugOf = cwd => cwd.replace(/[^A-Za-z0-9]/g, '-').replace(/^-/, '');
 
 // Рабочая папка сессии — из первой строки транскрипта. Слаг неоднозначен:
 // c--Proj-Foo-other — это и подпапка Foo\other, и соседний проект Foo-other.

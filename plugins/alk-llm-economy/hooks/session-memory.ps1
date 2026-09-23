@@ -3,6 +3,8 @@
 # anything and costs a turn; in the 2026-09-13 session the index never arrived.
 # The hook delivers it deterministically (~600 tokens). Individual memory files
 # stay on disk and are opened by the links from the index when a task needs them.
+# Only the global index: the project index (~/.claude/projects/<slug>/memory/MEMORY.md)
+# is loaded by Claude Code itself, injecting it here would pay for it twice a turn.
 $ErrorActionPreference = 'SilentlyContinue'
 . (Join-Path $PSScriptRoot 'lib\ascii-json.ps1')
 

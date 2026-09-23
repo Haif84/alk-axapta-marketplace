@@ -37,6 +37,7 @@
 node --test scripts/
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File hooks\read-gate.test.ps1
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File cursor\read-gate.test.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\install.test.ps1
 ```
 
 Тесты хуков — по файлу на хук (`hooks\*.test.ps1`), каждый той же строкой.

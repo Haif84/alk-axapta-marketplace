@@ -43,7 +43,7 @@ function fixture(sessions) {
   const home = path.join(root, 'home');
   const cwd = path.join(root, 'project');
   fs.mkdirSync(cwd, { recursive: true });
-  const slug = cwd.replace(/[:\\/]/g, '-').replace(/^-/, '');
+  const slug = cwd.replace(/[^A-Za-z0-9]/g, '-').replace(/^-/, '');
   const dir = path.join(home, '.claude', 'projects', slug);
   fs.mkdirSync(dir, { recursive: true });
   let age = sessions.length;

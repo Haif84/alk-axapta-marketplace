@@ -28,6 +28,11 @@ test('находит папку проекта, когда регистр бук
   assert.strictEqual(projectDir('c:\\Proj\\Foo', h), dir);
 });
 
+test('подчёркивание и точка в пути дают дефис, как у Claude Code', () => {
+  const { h, dir } = home('e--ZeroCoder-01-Tools-my-app');
+  assert.strictEqual(projectDir('e:\\ZeroCoder\\01_Tools\\my.app', h), dir);
+});
+
 test('сообщает об отсутствии папки проекта', () => {
   const { h } = home('c--Proj-Foo');
   assert.throws(() => projectDir('c:\\Proj\\Bar', h), /не найдена/);
