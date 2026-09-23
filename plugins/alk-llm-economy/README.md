@@ -12,7 +12,7 @@
 |---|---|
 | Хуки `hooks/*.ps1`: `read-gate`, `context-budget`, `pause-guard`, `keepalive-gate`, `model-notice`, `model-switch-guard`, `test-output-filter`, `session-memory`, `commit-reminder` | сами, через `hooks/hooks.json`, как только плагин включён |
 | Ключи `settings.json` (`claude/settings.fragment.json`): deny схем, `autoCompactWindow`, `promptCacheTtl`, `bashOutputMaxChars`, `skillOverrides`, строка статуса | `/alk-llm-economy:economy-setup` |
-| Правила в `~/.claude/CLAUDE.md` (`claude/CLAUDE.economy.md`, блок между маркерами) | то же |
+| Правила в `~/.claude/CLAUDE.md`, один блок между маркерами: экономия (`claude/CLAUDE.economy.md`) и регламент команды ALK (`claude/CLAUDE.baseline.md`) | то же |
 | Агент Explore на Haiku (`claude/agents/explore.md` → `~/.claude/agents/`) | то же |
 | Скрипты замера `scripts/*.js` и `docs/` → junction `~/.claude/scripts`, `~/.claude/docs` | то же |
 
@@ -21,7 +21,8 @@
 
 ## Cursor
 
-С плагином приходят правило `rules/llm-economy.mdc` (alwaysApply), хук
+С плагином приходят правила `rules/llm-economy.mdc` и `rules/alk-baseline.mdc`
+(alwaysApply; второе — копия `claude/CLAUDE.baseline.md`, правится вместе с ним), хук
 `read-gate` (`cursor/hooks.json` → `cursor/read-gate.ps1` — обёртка над тем
 же `hooks/read-gate.ps1`) и агент `explore` (`cursor/agents/`). Остальные меры
 завязаны на настройки, транскрипты и кэш Claude Code; таблица «что не

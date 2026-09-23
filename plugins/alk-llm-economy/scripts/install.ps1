@@ -2,7 +2,7 @@
 # Хуки плагин подключает сам (hooks/hooks.json); здесь — остальное:
 #   junction ~/.claude/scripts и ~/.claude/docs -> папки плагина (на них ссылаются правила),
 #   агент Explore на Haiku -> ~/.claude/agents/explore.md,
-#   блок правил claude/CLAUDE.economy.md -> ~/.claude/CLAUDE.md между маркерами,
+#   блок правил claude/CLAUDE.economy.md + CLAUDE.baseline.md -> ~/.claude/CLAUDE.md между маркерами,
 #   ключи claude/settings.fragment.json -> ~/.claude/settings.json (merge-settings.js).
 # Windows PowerShell 5.1. Без -Apply ничего не пишет, только показывает.
 # Запускать из клона маркетплейса (~/.claude/plugins/marketplaces/...), не из кэша
@@ -55,7 +55,8 @@ if ((Show-Diff $agentSrc $agentDst) -and $Apply) {
 
 # 3. Блок правил в глобальный CLAUDE.md: заменяется между маркерами, остальное не трогается.
 $claudeMd = Join-Path $target 'CLAUDE.md'
-$block = "$begin`n" + [IO.File]::ReadAllText((Join-Path $root 'claude\CLAUDE.economy.md')).TrimEnd() + "`n$end"
+$rules = foreach ($f in 'CLAUDE.economy.md', 'CLAUDE.baseline.md') { [IO.File]::ReadAllText((Join-Path $root "claude\$f")).TrimEnd() }
+$block = "$begin`n" + ($rules -join "`n`n") + "`n$end"
 $old = if (Test-Path $claudeMd) { [IO.File]::ReadAllText($claudeMd) } else { '' }
 $re = [regex]::Escape($begin) + '[\s\S]*?' + [regex]::Escape($end)
 $new = if ($old -match $re) { [regex]::Replace($old, $re, { param($m) $block }) }

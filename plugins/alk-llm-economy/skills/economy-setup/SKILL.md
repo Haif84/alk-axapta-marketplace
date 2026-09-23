@@ -43,7 +43,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "<папка>\scripts\in
 | `MISSING junction ~/.claude/scripts`, `docs` | будут созданы; на них ссылаются правила (`node ~/.claude/scripts/session-cost.js` и т. п.) |
 | `CONFLICT` | папка уже есть и ведёт не туда — не трогать, решает владелец |
 | `NEW`/`DIFF ~/.claude/agents/explore.md` | Explore на Haiku подменит встроенный ($0.08 за вызов против $1.24 у general-purpose) |
-| `NEW`/`DIFF ~/.claude/CLAUDE.md` | блок правил между маркерами `alk-llm-economy:begin/end`; остальной файл не меняется, делается `.bak-<метка>` |
+| `NEW`/`DIFF ~/.claude/CLAUDE.md` | блок правил между маркерами `alk-llm-economy:begin/end`: экономия и регламент команды ALK (роли, безопасность, автономия); остальной файл не меняется, делается `.bak-<метка>` |
 | вывод `merge-settings.js --dry-run` | какие ключи `settings.json` изменятся |
 | `DUPLICATE` | хуки комплекта подключены в `settings.json` руками — задвоятся с плагином, предложить убрать эти записи |
 
@@ -101,8 +101,8 @@ Junction ведут в клон маркетплейса — скрипты и d
 
 ## Cursor
 
-Ставить нечего: с плагином приходят правило `rules/llm-economy.mdc`
-(alwaysApply), хук `read-gate` (`cursor/hooks.json` → `cursor/read-gate.ps1`,
+Ставить нечего: с плагином приходят правила `rules/llm-economy.mdc` и
+`rules/alk-baseline.mdc` (регламент команды ALK, alwaysApply), хук `read-gate` (`cursor/hooks.json` → `cursor/read-gate.ps1`,
 та же логика, что у Claude) и агент `explore` (`cursor/agents/`).
 
 Проверка:
