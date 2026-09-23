@@ -34,7 +34,7 @@
 ## Тесты
 
 ```
-node --test scripts/
+node --test scripts/*.test.js
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File hooks\read-gate.test.ps1
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File cursor\read-gate.test.ps1
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\install.test.ps1

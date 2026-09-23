@@ -115,6 +115,9 @@ try {
         Assert-True ($r.Out -match 'CONFLICT') 'конфликт не назван'
         Assert-True (Test-Path "$h\.claude\scripts\my.txt") 'чужой файл пропал'
         Assert-True ((Get-Item "$h\.claude\scripts").LinkType -ne 'Junction') 'чужая папка подменена junction'
+        $sl = (Read-Text "$h\.claude\settings.json" | ConvertFrom-Json).statusLine.command
+        Assert-True ($sl -notmatch [regex]::Escape("$h\.claude\scripts")) "statusLine ведёт в занятую папку: $sl"
+        Assert-True ($sl -match 'alk-llm-economy\\scripts\\statusline\.ps1') "statusLine не ведёт в клон: $sl"
     }
 
     Test-Case 'хук комплекта в settings.json — предупреждение о задвоении' {

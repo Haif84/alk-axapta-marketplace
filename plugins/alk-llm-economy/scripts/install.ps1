@@ -31,6 +31,7 @@ function Show-Diff($src, $dst) {
 }
 
 # 1. Junction-ы: правила зовут node ~/.claude/scripts/... и читают ~/.claude/docs/...
+$scriptsConflict = $false
 foreach ($dir in 'scripts', 'docs') {
     $link = Join-Path $target $dir
     $src  = Join-Path $root $dir
@@ -39,6 +40,7 @@ foreach ($dir in 'scripts', 'docs') {
         Write-Host "junction ok $link"
     } elseif ($item) {
         Write-Host "CONFLICT $link уже есть и ведёт не сюда ($($item.LinkType) $($item.Target)) — решает владелец, скрипт не трогает"
+        if ($dir -eq 'scripts') { $scriptsConflict = $true }
     } else {
         Write-Host "MISSING junction $link -> $src"
         if ($Apply) { cmd /c mklink /J "$link" "$src" | Out-Null; Write-Host "created" }
@@ -71,6 +73,15 @@ if ((Show-Diff $tmp $claudeMd) -and $Apply) {
 # 4. Ключи settings.json: слияние с резервной копией, allowlist и чужие хуки не трогаются.
 $fragment = Join-Path $root 'claude\settings.fragment.json'
 $merge = Join-Path $root 'scripts\merge-settings.js'
+# ~/.claude/scripts занят чужой папкой — junction не будет, и statusLine по пути
+# фрагмента указал бы в пустоту. Направляем его прямо в клон маркетплейса.
+if ($scriptsConflict) {
+    $jsonRoot = ($root -replace '\\', '\\') + '\\scripts\\'
+    $text = [IO.File]::ReadAllText($fragment).Replace('<HOME>\\.claude\\scripts\\', $jsonRoot)
+    $fragment = Join-Path $env:TEMP 'alk-llm-economy-settings.fragment.json'
+    [IO.File]::WriteAllText($fragment, $text, (New-Object System.Text.UTF8Encoding $false))
+    Write-Host "statusLine -> $root\scripts\statusline.ps1 (junction ~/.claude/scripts занят); правила с node ~/.claude/scripts/... на этой машине не сработают"
+}
 if ($Apply) { node $merge $fragment } else { node $merge $fragment --dry-run }
 
 # 5. Хуки комплекта, подключённые руками в settings.json, задвоятся с хуками плагина.
