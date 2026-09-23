@@ -288,6 +288,22 @@ Test-Case 'неизвестная модель — цена по Opus 5, как 
     Assert-True ($j.reason -match '0\.75') "нет запасной цены Opus: $($j.reason)"
 }
 
+# У Fable 5.1 чтение кэша $0.25 за 1M — дешевле Opus 5; у Fable 5 — $1.00.
+# Имена похожи, цены разнятся вчетверо: префикс не должен их путать.
+Test-Case 'Fable 5.1 — чтение кэша дешевле Opus 5' {
+    $r = Invoke-Hook (New-Transcript -Ctx 150000 -Model 'claude-fable-5-1') ([guid]::NewGuid().ToString('N'))
+    $j = $r.Raw | ConvertFrom-Json
+    Assert-True ($j.reason -match '0\.38') "нет цены десяти ходов по Fable 5.1: $($j.reason)"
+    Assert-True ($j.reason -match '0\.10') "нет цены после сжатия по Fable 5.1: $($j.reason)"
+}
+
+Test-Case 'Fable 5 — своя цена, не Fable 5.1' {
+    $r = Invoke-Hook (New-Transcript -Ctx 150000 -Model 'claude-fable-5') ([guid]::NewGuid().ToString('N'))
+    $j = $r.Raw | ConvertFrom-Json
+    Assert-True ($j.reason -match '1\.50') "нет цены десяти ходов по Fable 5: $($j.reason)"
+    Assert-True ($j.reason -match '0\.40') "нет цены после сжатия по Fable 5: $($j.reason)"
+}
+
 Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue
 Get-ChildItem -Path $env:TEMP -Filter 'claude-context-budget-*.flag' -ErrorAction SilentlyContinue |
     Remove-Item -Force -ErrorAction SilentlyContinue

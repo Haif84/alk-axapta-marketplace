@@ -267,6 +267,21 @@ Test-Case 'Opus 5.5 — своя цена, не Opus 5' {
     Assert-True ($j.reason -match '0\.32') "нет цены новой сессии по Opus 5.5: $($j.reason)"
 }
 
+# Перезапись считается от входа: у Fable $10 за 1M — вдвое дороже Opus 5.
+# До оценки по модели хук показывал для Fable $1.50 и занижал цену паузы вдвое.
+Test-Case 'Fable 5.1 после паузы — перезапись вдвое дороже Opus 5' {
+    $r = Invoke-Hook (New-Transcript -MinutesAgo 180 -Ctx 150000 -Model 'claude-fable-5-1') ([guid]::NewGuid().ToString('N'))
+    $j = $r.Raw | ConvertFrom-Json
+    Assert-True ($j.reason -match '3\.00') "нет цены перезаписи по Fable 5.1: $($j.reason)"
+    Assert-True ($j.reason -match '0\.80') "нет цены новой сессии по Fable 5.1: $($j.reason)"
+}
+
+Test-Case 'Fable 5 после паузы — та же цена входа, что у 5.1' {
+    $r = Invoke-Hook (New-Transcript -MinutesAgo 180 -Ctx 150000 -Model 'claude-fable-5') ([guid]::NewGuid().ToString('N'))
+    $j = $r.Raw | ConvertFrom-Json
+    Assert-True ($j.reason -match '3\.00') "нет цены перезаписи по Fable 5: $($j.reason)"
+}
+
 Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue
 Get-ChildItem -Path $env:TEMP -Filter 'claude-pause-guard-*.flag' -ErrorAction SilentlyContinue |
     Remove-Item -Force -ErrorAction SilentlyContinue
