@@ -1,0 +1,9 @@
+{
+  "name": "alk-llm-economy",
+  "description": "Экономия токенов в Claude Code: хуки (read-gate, бюджет контекста, пауза/keepalive, страж смены модели, фильтр вывода тестов, индекс памяти, напоминание о коммите) подключаются сами; скилл economy-setup ставит ключи settings.json, правила в CLAUDE.md, Explore на Haiku и скрипты замера стоимости.",
+  "version": "1.0.0",
+  "author": {
+    "name": "ALK Development Team"
+  },
+  "license": "UNLICENSED"
+}

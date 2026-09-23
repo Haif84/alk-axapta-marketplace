@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "hooks": {
+    "preToolUse": [
+      {
+        "matcher": "Read",
+        "timeout": 10,
+        "command": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"${CURSOR_PLUGIN_ROOT}/cursor/read-gate.ps1\""
+      }
+    ]
+  }
+}

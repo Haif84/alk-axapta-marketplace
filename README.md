@@ -5,7 +5,7 @@ Microsoft Dynamics AX 2012 (ALK). Один репозиторий обслужи
 
 - **Claude Code** — манифест `.claude-plugin/marketplace.json` (все плагины, включая hooks)
 - **Cursor** (Team Marketplace, без Claude CLI) — манифест `.cursor-plugin/marketplace.json`
-  (только `alk-axapta-tools` + `alk-self-update`)
+  (`alk-axapta-tools`, `alk-self-update`, `alk-llm-economy`)
 
 Клонировать репозиторий и копировать кэш плагинов **не нужно**.
 
@@ -35,6 +35,7 @@ MCP-инструмент `mcp_guide(audience)` — этот плагин её б
 | `alk-self-update` | да | да | Проверка обновлений (dual-runtime) |
 | `alk-hooks-plans2project` | да | нет | Hook: `ExitPlanMode` → `<cwd>/plans/` |
 | `alk-hooks-claude2telegram` | да | нет | Hooks Telegram Allow/Deny (Claude-only) |
+| `alk-llm-economy` | да | да (правило, read-gate, explore) | Экономия токенов: хуки + скилл `economy-setup` |
 
 Скиллы `alk-axapta-tools`:
 
@@ -70,6 +71,7 @@ XPOTools бандлируется внутри плагина — отдельн
 /plugin install alk-hooks-plans2project@alk-axapta
 /plugin install alk-hooks-claude2telegram@alk-axapta
 /plugin install alk-self-update@alk-axapta
+/plugin install alk-llm-economy@alk-axapta
 ```
 
 ### 3. Перезапустить Claude Code / VS Code
@@ -79,6 +81,9 @@ XPOTools бандлируется внутри плагина — отдельн
 - Hook `move-plan` (`alk-hooks-plans2project`) активен сам.
 - Хуки `alk-hooks-claude2telegram` без файла секретов молча ничего не делают —
   см. `plugins/alk-hooks-claude2telegram/README.md`.
+- Хуки `alk-llm-economy` активны сами; ключи `settings.json`, правила в
+  `CLAUDE.md` и скрипты замера ставит `/alk-llm-economy:economy-setup`
+  (сначала показывает, что изменит) — см. `plugins/alk-llm-economy/README.md`.
 - Скиллы:
 
 ```
@@ -90,6 +95,7 @@ XPOTools бандлируется внутри плагина — отдельн
 /alk-axapta-tools:axapta-trace-helper
 /alk-axapta-tools:axapta-mcp-helper
 /alk-self-update:check-updates
+/alk-llm-economy:economy-setup
 ```
 
 ### 4. Разовая настройка ENV
@@ -115,7 +121,7 @@ XPOTools бандлируется внутри плагина — отдельн
 2. URL: `https://github.com/Haif84/alk-axapta-marketplace`
 3. Включить **Enable Auto Refresh** (нужен Cursor GitHub App на репозитории)
 4. Режим установки: `alk-axapta-tools` — **Default On** или **Required**;
-   `alk-self-update` — Default On по желанию
+   `alk-self-update`, `alk-llm-economy` — Default On по желанию
 
 Hooks-плагины в Cursor-каталоге **не перечислены** — их ставить не нужно.
 
@@ -212,7 +218,7 @@ alk-axapta-marketplace/
 ├── .claude-plugin/
 │   └── marketplace.json              # Claude: все плагины
 ├── .cursor-plugin/
-│   └── marketplace.json              # Cursor: tools + self-update
+│   └── marketplace.json              # Cursor: tools + self-update + llm-economy
 ├── plugins/
 │   ├── alk-axapta-tools/
 │   │   ├── .claude-plugin/plugin.json
@@ -223,6 +229,7 @@ alk-axapta-marketplace/
 │   │       └── XPOTools/
 │   ├── alk-hooks-plans2project/      # Claude-only
 │   ├── alk-hooks-claude2telegram/    # Claude-only
+│   ├── alk-llm-economy/              # Claude: hooks/; Cursor: rules/ + cursor/
 │   └── alk-self-update/
 │       ├── .claude-plugin/plugin.json
 │       ├── .cursor-plugin/plugin.json

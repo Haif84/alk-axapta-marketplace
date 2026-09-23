@@ -1,0 +1,46 @@
+---
+description: Token economy for agent sessions (alk-llm-economy); measured on Claude Code, rules that carry over to Cursor
+alwaysApply: true
+---
+
+# LLM token economy
+
+Every turn is billed for the whole accumulated context: a file pulled in on
+turn 10 of 40 is paid for thirty times. Save tokens wherever quality allows;
+never leave work unfinished or a claim unverified to save them.
+
+## Context
+
+- Name specific files and lines; do not read a whole file without need. The
+  `read-gate` hook denies `Read` of a file over 350 lines without a range and
+  returns its outline: take the range from the outline, or locate with
+  `grep -n` first.
+- Fold big logs and command output through `grep`/`findstr`/`Select-String`
+  up front; only a summary enters context. Never read a raw chat transcript.
+- A full overview of a big file or tree goes to the `explore` subagent; only
+  its report enters context.
+- Fewer turns: independent tool calls in one turn; do not reread a file after
+  editing it; summarise long output instead of pasting it.
+- A long session gets expensive on every turn: at a natural break suggest
+  summarising (`/summarize`) or a new chat with a short handoff (state, next
+  steps, decisions, files and lines).
+
+## Models and subagents
+
+- Model is chosen before the first message and not switched mid-chat: a switch
+  rebuilds the prompt cache.
+- Subagents only for two or more independent pieces. Give them explicit
+  context: what was read, what was tried, which files and lines.
+- Recon and lookups on a cheaper/faster model; decisions and reviews on the
+  strongest one. Reviewer is never the author.
+
+## Task levels
+
+Declare the level in one line before work; in doubt take the lower one.
+Ceremony must not cost more than the edit.
+
+| Level | Scope | Process |
+|---|---|---|
+| S | one place, the edit is clear | edit, verify, commit; no spec, plan or subagents |
+| M | one chain across 2–5 files | design in chat, solo, review at the end |
+| L | two or more independent pieces | spec → plan → executors + separate reviewer |
