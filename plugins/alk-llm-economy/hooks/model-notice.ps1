@@ -1,5 +1,6 @@
 ﻿# UserPromptSubmit hook: one line about a non-default model or effort, once per
-# session. The default is Opus 5 high, but /model and /effort write the last
+# session. The team default is Sonnet 5 medium (claude/settings.fragment.json;
+# medium because modelSettings caps Sonnet there), but /model and /effort write the last
 # session's choice into settings.json, so a session after Fable or after a
 # lowered effort silently starts on it and the owner pays another rate.
 # Why not SessionStart, where this check used to live: settings.json is the only
@@ -31,23 +32,29 @@ if (-not $s) { exit 0 }
 $model = [string]$s.model
 $effort = [string]$s.effortLevel
 $bare = ($model -replace '\[1m\]$', '').Trim().ToLowerInvariant()
-# Ключа нет — значит выбор не переопределяли, это и есть дефолт.
-$isDefaultModel = ($bare -eq '' -or $bare -match '^(claude-)?opus(-5)?$')
-$isDefaultEffort = ($effort -eq '' -or $effort -eq 'high')
+# Ключа нет — сессия идёт на дефолте самого Claude Code, а это не Sonnet.
+$isDefaultModel = ($bare -match '^(claude-)?sonnet(-5)?$')
+$isDefaultEffort = ($effort -eq 'medium')
 if ($isDefaultModel -and $isDefaultEffort) { exit 0 }
 
+# Цены вход/выход за 1M — scripts/prices.js.
+$defaultPrice = '$2/$10'
 $price = '$5/$25'
-if ($bare -match 'fable|mythos') { $price = '$10/$50' }
+if ($bare -eq '') { $price = '' }
+elseif ($bare -match 'fable|mythos') { $price = '$10/$50' }
+elseif ($bare -match 'opus-5-5') { $price = '$4/$20' }
 elseif ($bare -match 'sonnet-4-6') { $price = '$3/$15' }
 elseif ($bare -match 'sonnet') { $price = '$2/$10' }
 elseif ($bare -match 'haiku') { $price = '$1/$5' }
 $shownModel = if ($model) { $model } else { '(не задан)' }
 $shownEffort = if ($effort) { $effort } else { '(не задан)' }
-$line = "=== МОДЕЛЬ СЕССИИ ===`nsettings.json: model=$shownModel, effort=$shownEffort — не дефолт (Opus 5 high)."
-if ($price -eq '$5/$25') {
+$line = "=== МОДЕЛЬ СЕССИИ ===`nsettings.json: model=$shownModel, effort=$shownEffort — не дефолт команды (Sonnet 5 medium)."
+if (-not $price) {
+    $line += " Без ключа model сессия идёт на модели Claude Code по умолчанию; дефолт команды ставит /alk-llm-economy:economy-setup."
+} elseif ($price -eq $defaultPrice) {
     $line += " Цена за токен та же ($price за 1M), отличается глубина думанья."
 } else {
-    $line += " Цена $price за 1M токенов против `$5/`$25 у Opus 5."
+    $line += " Цена $price за 1M токенов против $defaultPrice у Sonnet 5."
 }
 $line += " Модель и effort меняются до первого сообщения: внутри сессии переключение сбрасывает кэш. Если это не намеренно, скажи владельцу до начала работы."
 

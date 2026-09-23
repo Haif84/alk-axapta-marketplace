@@ -31,6 +31,10 @@ test('без разбивки по TTL вся запись считается п
   assert.strictEqual(writeCost('claude-opus-5', { cache_creation_input_tokens: 1e6 }), 5 * 1.25);
 });
 
+test('Opus 5.5 считается по своей цене, а не по Opus 5', () => {
+  assert.strictEqual(writeCost('claude-opus-5-5', { cache_creation_input_tokens: 1e6 }), 4 * 1.25);
+});
+
 test('при пятиминутном TTL неистёкший ход платит ту же запись дешевле', () => {
   const u = { cache_creation: { ephemeral_1h_input_tokens: 1e6 }, cache_read_input_tokens: 5e5 };
   assert.strictEqual(ttlAlternative('claude-opus-5', u, false), 5 * 1.25);

@@ -10,8 +10,8 @@ Calibrated by measurements in `~/.claude/docs/costs.md`, not by benchmarks.
 
 | Work | Model, effort |
 |---|---|
-| Default | Opus 5 `high` |
-| Session filled by tool output: logs, tests, planned refactoring, recon, small tasks | Opus 5 |
+| Default (team, `settings.json`) | Sonnet 5 `medium` |
+| Session filled by tool output: logs, tests, planned refactoring, recon, small tasks | Sonnet 5, the default |
 | Decision-heavy, read-light: spec, plan, architecture, invariant | Fable 5.1 solo driver only, never as a subagent (2× per token, pays back in fewer turns) |
 | One deep chain | Fable 5.1 `medium` solo; second opinion Opus 5 `high` |
 | Recon, lookups | `low`/`medium` or Explore (Haiku) |

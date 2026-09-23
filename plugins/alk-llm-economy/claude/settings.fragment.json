@@ -1,6 +1,6 @@
 {
-  "model": "claude-opus-5",
-  "effortLevel": "high",
+  "model": "sonnet",
+  "effortLevel": "medium",
   "promptCacheTtl": "1h",
   "autoCompactWindow": 133000,
   "bashOutputMaxChars": 12000,

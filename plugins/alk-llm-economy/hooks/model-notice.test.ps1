@@ -51,28 +51,39 @@ function Test-Case {
 
 function Assert-True { param([bool]$Cond, [string]$Msg) if (-not $Cond) { throw $Msg } }
 
-Test-Case 'дефолт opus[1m] high — молчит' {
-    $r = Invoke-Hook (New-Home @{ model = 'opus[1m]'; effortLevel = 'high' })
+Test-Case 'дефолт sonnet medium — молчит' {
+    $r = Invoke-Hook (New-Home @{ model = 'sonnet'; effortLevel = 'medium' })
     Assert-True ($r.Context -notmatch 'МОДЕЛЬ СЕССИИ') "о дефолте сообщать нечего: $($r.Context)"
 }
 
-Test-Case 'Fable вместо Opus — строка с ценой за токен' {
+Test-Case 'полный id claude-sonnet-5[1m] medium — тоже дефолт' {
+    $r = Invoke-Hook (New-Home @{ model = 'claude-sonnet-5[1m]'; effortLevel = 'medium' })
+    Assert-True ($r.Context -notmatch 'МОДЕЛЬ СЕССИИ') "id вместо псевдонима — не отклонение: $($r.Context)"
+}
+
+Test-Case 'Fable вместо Sonnet — строка с ценой за токен' {
     $r = Invoke-Hook (New-Home @{ model = 'claude-fable-5-1[1m]'; effortLevel = 'high' })
     Assert-True ($r.Context -match 'МОДЕЛЬ СЕССИИ') "нет строки о модели: $($r.Context)"
     Assert-True ($r.Context -match 'fable') "в строке нет имени модели: $($r.Context)"
     Assert-True ($r.Context -match '\$10/\$50') "в строке нет цены модели: $($r.Context)"
-    Assert-True ($r.Context -match '\$5/\$25') "в строке нет цены дефолта: $($r.Context)"
+    Assert-True ($r.Context -match '\$2/\$10') "в строке нет цены дефолта: $($r.Context)"
 }
 
-Test-Case 'effort ниже дефолта при Opus — строка про effort, без смены цены' {
-    $r = Invoke-Hook (New-Home @{ model = 'opus[1m]'; effortLevel = 'medium' })
+Test-Case 'Opus 5 — своя цена' {
+    $r = Invoke-Hook (New-Home @{ model = 'opus'; effortLevel = 'medium' })
+    Assert-True ($r.Context -match '\$5/\$25') "в строке нет цены Opus 5: $($r.Context)"
+}
+
+Test-Case 'Opus 5.5 — своя цена, не Opus 5' {
+    $r = Invoke-Hook (New-Home @{ model = 'claude-opus-5-5[1m]'; effortLevel = 'medium' })
+    Assert-True ($r.Context -match '\$4/\$20') "в строке нет цены Opus 5.5: $($r.Context)"
+}
+
+Test-Case 'effort выше дефолта при Sonnet — строка про effort, без смены цены' {
+    $r = Invoke-Hook (New-Home @{ model = 'sonnet'; effortLevel = 'high' })
     Assert-True ($r.Context -match 'МОДЕЛЬ СЕССИИ') "нет строки о настройках: $($r.Context)"
-    Assert-True ($r.Context -match 'medium') "в строке нет текущего effort: $($r.Context)"
-}
-
-Test-Case 'Sonnet — своя цена' {
-    $r = Invoke-Hook (New-Home @{ model = 'claude-sonnet-5'; effortLevel = 'high' })
-    Assert-True ($r.Context -match '\$2/\$10') "в строке нет цены Sonnet: $($r.Context)"
+    Assert-True ($r.Context -match 'high') "в строке нет текущего effort: $($r.Context)"
+    Assert-True ($r.Context -match 'та же') "цена та же, а строка говорит о другой: $($r.Context)"
 }
 
 Test-Case 'нет settings.json — молчит' {
@@ -80,9 +91,10 @@ Test-Case 'нет settings.json — молчит' {
     Assert-True ($r.Raw -eq '') "без settings.json сказать нечего: $($r.Raw)"
 }
 
-Test-Case 'model не задан — это дефолт, молчим' {
-    $r = Invoke-Hook (New-Home @{ effortLevel = 'high' })
-    Assert-True ($r.Context -notmatch 'МОДЕЛЬ СЕССИИ') "отсутствие ключа — не отклонение: $($r.Context)"
+Test-Case 'model не задан — не дефолт команды, говорим' {
+    $r = Invoke-Hook (New-Home @{ effortLevel = 'medium' })
+    Assert-True ($r.Context -match 'МОДЕЛЬ СЕССИИ') "без ключа сессия идёт не на Sonnet: $($r.Context)"
+    Assert-True ($r.Context -match 'не задан') "в строке не сказано, что ключа нет: $($r.Context)"
 }
 
 Test-Case 'второй промпт той же сессии — молчит' {
