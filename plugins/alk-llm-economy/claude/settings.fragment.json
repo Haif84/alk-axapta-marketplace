@@ -1,0 +1,47 @@
+{
+  "model": "sonnet",
+  "effortLevel": "medium",
+  "promptCacheTtl": "1h",
+  "autoCompactWindow": 133000,
+  "bashOutputMaxChars": 12000,
+  "switchModelsOnFlag": false,
+  "env": {
+    "CLAUDE_CODE_SUBAGENT_MODEL": "sonnet"
+  },
+  "modelSettings": {
+    "claude-sonnet-5": {
+      "maxEffortLevel": "medium"
+    },
+    "claude-haiku-4-5": {
+      "maxEffortLevel": "medium"
+    }
+  },
+  "permissions": {
+    "deny": [
+      "Artifact",
+      "Workflow",
+      "NotebookEdit",
+      "ScheduleWakeup"
+    ]
+  },
+  "skillOverrides": {
+    "claude-api": "name-only",
+    "dataviz": "user-invocable-only",
+    "design": "user-invocable-only",
+    "run": "user-invocable-only",
+    "loop": "user-invocable-only",
+    "schedule": "user-invocable-only",
+    "security-review": "user-invocable-only",
+    "init": "user-invocable-only",
+    "simplify": "user-invocable-only",
+    "fewer-permission-prompts": "user-invocable-only",
+    "keybindings-help": "user-invocable-only",
+    "artifact-capabilities": "off",
+    "artifact-diagramming": "off",
+    "workflow-authoring": "off"
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"<HOME>\\.claude\\scripts\\statusline.ps1\""
+  }
+}

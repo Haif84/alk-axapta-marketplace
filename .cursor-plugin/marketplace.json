@@ -6,7 +6,7 @@
   },
   "metadata": {
     "description": "Инструменты для проектов Microsoft Dynamics AX 2012 (ALK). Cursor Team Marketplace — без Claude-only hooks.",
-    "version": "1.9.27",
+    "version": "1.9.28",
     "pluginRoot": "plugins"
   },
   "plugins": [
@@ -19,6 +19,11 @@
       "name": "alk-self-update",
       "source": "alk-self-update",
       "description": "Проверка обновлений маркетплейса: Claude — cron/CLI; Cursor — инструкция Customize/Reload."
+    },
+    {
+      "name": "alk-llm-economy",
+      "source": "alk-llm-economy",
+      "description": "Экономия токенов: правило llm-economy, хук read-gate (длинный файл без диапазона — отказ с оглавлением), агент explore; скилл economy-setup."
     }
   ]
 }

@@ -1,0 +1,14 @@
+{
+  "name": "alk-llm-economy",
+  "displayName": "ALK LLM Economy",
+  "description": "Экономия токенов в Cursor: правило llm-economy (alwaysApply), хук read-gate (отказ на чтение длинного файла без диапазона, с оглавлением), агент explore для обзоров. Скилл economy-setup проверяет установку.",
+  "version": "1.0.0",
+  "author": {
+    "name": "ALK Development Team"
+  },
+  "license": "UNLICENSED",
+  "rules": "./rules/",
+  "skills": "./skills/",
+  "agents": "./cursor/agents/",
+  "hooks": "./cursor/hooks.json"
+}
