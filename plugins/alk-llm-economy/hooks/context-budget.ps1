@@ -21,6 +21,7 @@
 $ErrorActionPreference = 'SilentlyContinue'
 . (Join-Path $PSScriptRoot 'lib\ascii-json.ps1')
 . (Join-Path $PSScriptRoot 'lib\system-prompt.ps1')
+. (Join-Path $PSScriptRoot 'lib\model-price.ps1')
 $raw = [Console]::In.ReadToEnd()
 try { $j = $raw | ConvertFrom-Json } catch { exit 0 }
 # Системный промпт владелец не набирал и повторить не может: блокировка его
@@ -35,13 +36,15 @@ if ($j.prompt -match '^\s*/(remember(:remember)?|compact)(\s|$)') { exit 0 }
 $path = $j.transcript_path
 if (-not $path -or -not (Test-Path -LiteralPath $path)) { exit 0 }
 
-$ctx = 0
+$ctx = 0; $model = ''
 $lines = @(Get-Content -LiteralPath $path -Tail 300 -Encoding utf8)
 [array]::Reverse($lines)
 foreach ($line in $lines) {
     if ($line -notmatch '"type":"assistant"' -or $line -notmatch '"usage"') { continue }
-    try { $u = ($line | ConvertFrom-Json).message.usage } catch { continue }
+    try { $entry = $line | ConvertFrom-Json } catch { continue }
+    $u = $entry.message.usage
     if (-not $u) { continue }
+    $model = [string]$entry.message.model
     $ctx = [int]$u.input_tokens + [int]$u.cache_creation_input_tokens + [int]$u.cache_read_input_tokens
     break
 }
@@ -68,7 +71,7 @@ New-Item -ItemType File -Path $marker -Force | Out-Null
 $k = [int]($ctx / 1000)
 # Порог адресован владельцу, а не модели: ход останавливается до запроса,
 # поэтому текст модель не увидит и указаний ей не содержит.
-$CacheReadPerKTok = 0.0005   # Opus 5: $0.50 за 1M токенов чтения кэша (scripts/prices.js)
+$CacheReadPerKTok = (Get-ModelPrice $model).cr / 1000   # чтение кэша у модели сессии, $/1k (scripts/prices.js)
 $BaseContext = 40000         # контекст после сжатия ≈ старт новой сессии (docs/costs.md)
 $here  = [string]::Format([cultureinfo]::InvariantCulture, '{0:0.00}', $ctx * 10 * $CacheReadPerKTok / 1000)
 $fresh = [string]::Format([cultureinfo]::InvariantCulture, '{0:0.00}', $BaseContext * 10 * $CacheReadPerKTok / 1000)

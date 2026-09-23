@@ -12,7 +12,7 @@ New-Item -ItemType Directory -Path $tmp -Force | Out-Null
 $failed = 0
 
 function New-Transcript {
-    param([double]$MinutesAgo, [int]$Ctx, [string]$Text = 'Готово. Делаем сейчас или после замера?', [double]$SidechainMinutesAgo = -1)
+    param([double]$MinutesAgo, [int]$Ctx, [string]$Text = 'Готово. Делаем сейчас или после замера?', [double]$SidechainMinutesAgo = -1, [string]$Model = '')
     $ts = [datetime]::UtcNow.AddMinutes(-$MinutesAgo).ToString('yyyy-MM-ddTHH:mm:ss.fffZ')
     $path = Join-Path $tmp ([guid]::NewGuid().ToString('N') + '.jsonl')
     $user = @{ type = 'user'; timestamp = $ts; message = @{ role = 'user'; content = 'привет' } }
@@ -25,6 +25,7 @@ function New-Transcript {
             content = @(@{ type = 'text'; text = $Text })
         }
     }
+    if ($Model) { $asst.message.model = $Model }
     $lines = @(($user | ConvertTo-Json -Compress -Depth 9), ($asst | ConvertTo-Json -Compress -Depth 9))
     if ($SidechainMinutesAgo -ge 0) {
         $side = $asst.Clone()
@@ -249,6 +250,22 @@ Test-Case 'keepalive-пинг после паузы — не блокирует�
     Assert-True ($r.Raw -eq '') "пинг keepalive заблокирован: $($r.Raw)"
 }
 
+
+# Цена перезаписи — по модели сессии: запись кэша на час = вход × 2 (scripts/prices.js).
+Test-Case 'Sonnet 150k после паузы — перезапись и новая сессия по цене Sonnet' {
+    $r = Invoke-Hook (New-Transcript -MinutesAgo 180 -Ctx 150000 -Model 'claude-sonnet-5') ([guid]::NewGuid().ToString('N'))
+    $j = $r.Raw | ConvertFrom-Json
+    Assert-True ($j.reason -match '0\.60') "нет цены перезаписи по Sonnet: $($j.reason)"
+    Assert-True ($j.reason -match '0\.16') "нет цены новой сессии по Sonnet: $($j.reason)"
+    Assert-True ($j.reason -notmatch '1\.50') "осталась цена Opus: $($j.reason)"
+}
+
+Test-Case 'Opus 5.5 — своя цена, не Opus 5' {
+    $r = Invoke-Hook (New-Transcript -MinutesAgo 180 -Ctx 150000 -Model 'claude-opus-5-5') ([guid]::NewGuid().ToString('N'))
+    $j = $r.Raw | ConvertFrom-Json
+    Assert-True ($j.reason -match '1\.20') "нет цены перезаписи по Opus 5.5: $($j.reason)"
+    Assert-True ($j.reason -match '0\.32') "нет цены новой сессии по Opus 5.5: $($j.reason)"
+}
 
 Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue
 Get-ChildItem -Path $env:TEMP -Filter 'claude-pause-guard-*.flag' -ErrorAction SilentlyContinue |

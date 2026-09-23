@@ -10,7 +10,7 @@ New-Item -ItemType Directory -Path $tmp -Force | Out-Null
 $failed = 0
 
 function New-Transcript {
-    param([int]$Ctx)
+    param([int]$Ctx, [string]$Model = '')
     $ts = [datetime]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ss.fffZ')
     $path = Join-Path $tmp ([guid]::NewGuid().ToString('N') + '.jsonl')
     $user = @{ type = 'user'; timestamp = $ts; message = @{ role = 'user'; content = 'привет' } }
@@ -23,6 +23,7 @@ function New-Transcript {
             content = @(@{ type = 'text'; text = 'Готово.' })
         }
     }
+    if ($Model) { $asst.message.model = $Model }
     @(($user | ConvertTo-Json -Compress -Depth 9), ($asst | ConvertTo-Json -Compress -Depth 9)) |
         Out-File -LiteralPath $path -Encoding utf8
     return $path
@@ -264,6 +265,28 @@ Test-Case 'keepalive-пинг при 150k — не блокируется' {
     Assert-True ($r.Raw -eq '') "пинг keepalive заблокирован: $($r.Raw)"
 }
 
+
+# Цена в тексте — по модели сессии из транскрипта (scripts/prices.js), а не по
+# Opus: дефолт команды Sonnet, и с ценой Opus оценка врала в 2,5 раза.
+Test-Case 'Sonnet 150k — цена по чтению кэша Sonnet' {
+    $r = Invoke-Hook (New-Transcript -Ctx 150000 -Model 'claude-sonnet-5') ([guid]::NewGuid().ToString('N'))
+    $j = $r.Raw | ConvertFrom-Json
+    Assert-True ($j.reason -match '0\.30') "нет цены десяти ходов по Sonnet: $($j.reason)"
+    Assert-True ($j.reason -match '0\.08') "нет цены после сжатия по Sonnet: $($j.reason)"
+    Assert-True ($j.reason -notmatch '0\.75') "осталась цена Opus: $($j.reason)"
+}
+
+Test-Case 'Haiku с датой сборки в id — своя цена' {
+    $r = Invoke-Hook (New-Transcript -Ctx 150000 -Model 'claude-haiku-4-5-20251001') ([guid]::NewGuid().ToString('N'))
+    $j = $r.Raw | ConvertFrom-Json
+    Assert-True ($j.reason -match '0\.15') "нет цены по Haiku: $($j.reason)"
+}
+
+Test-Case 'неизвестная модель — цена по Opus 5, как раньше' {
+    $r = Invoke-Hook (New-Transcript -Ctx 150000 -Model '<synthetic>') ([guid]::NewGuid().ToString('N'))
+    $j = $r.Raw | ConvertFrom-Json
+    Assert-True ($j.reason -match '0\.75') "нет запасной цены Opus: $($j.reason)"
+}
 
 Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue
 Get-ChildItem -Path $env:TEMP -Filter 'claude-context-budget-*.flag' -ErrorAction SilentlyContinue |

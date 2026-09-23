@@ -12,11 +12,12 @@
 $ErrorActionPreference = 'SilentlyContinue'
 . (Join-Path $PSScriptRoot 'lib\ascii-json.ps1')
 . (Join-Path $PSScriptRoot 'lib\system-prompt.ps1')
+. (Join-Path $PSScriptRoot 'lib\model-price.ps1')
 
 $MinGapMinutes = 55      # cache TTL is 60; warn before it expires, not after
-$MinContext = 60000      # below this the rewrite costs under $0.60 — not worth a stop
+$MinContext = 60000      # below this the rewrite costs under $0.60 on Opus — not worth a stop
 $CacheTtlMinutes = 60
-$PricePerKTok = 0.01     # hourly cache write on Opus, calibrated in docs/costs.md
+$FreshContext = 40000    # context of a fresh session, docs/costs.md
 
 # Claude Code writes the event as UTF-8; [Console]::In would decode it with the
 # console codepage (CP866 here) and mangle Cyrillic in the prompt.
@@ -36,7 +37,7 @@ if (Test-SystemPrompt $j.prompt) { exit 0 }
 $path = $j.transcript_path
 if (-not $path -or -not (Test-Path -LiteralPath $path)) { exit 0 }
 
-$ctx = 0; $stamp = $null; $tail = ''
+$ctx = 0; $stamp = $null; $tail = ''; $model = ''
 $lines = @(Get-Content -LiteralPath $path -Tail 300 -Encoding utf8)
 [array]::Reverse($lines)
 foreach ($line in $lines) {
@@ -49,6 +50,7 @@ foreach ($line in $lines) {
     if (-not $u) { continue }
     $ctx = [int]$u.input_tokens + [int]$u.cache_creation_input_tokens + [int]$u.cache_read_input_tokens
     $stamp = $entry.timestamp
+    $model = [string]$entry.message.model
     $text = @($entry.message.content | Where-Object { $_.type -eq 'text' } | ForEach-Object { $_.text }) -join ' '
     if ($text) { $tail = ($text -replace '\s+', ' ').Trim() }
     break
@@ -62,6 +64,9 @@ $marker = Join-Path $env:TEMP ("claude-pause-guard-{0}.flag" -f $j.session_id)
 if ((Test-Path -LiteralPath $marker) -and ((Get-Content -LiteralPath $marker -Raw).Trim() -eq $stamp)) { exit 0 }
 Set-Content -LiteralPath $marker -Value $stamp -Encoding ascii
 
+# Запись кэша на час = вход × 2 у модели сессии (scripts/prices.js); на Opus 5 это $0.01 за 1k.
+$PricePerKTok = (Get-ModelPrice $model).in * 2 / 1000
+$fresh = [string]::Format([cultureinfo]::InvariantCulture, '{0:0.00}', $FreshContext / 1000 * $PricePerKTok)
 $k = [int]($ctx / 1000)
 $price = [string]::Format([cultureinfo]::InvariantCulture, '{0:0.00}', $ctx / 1000 * $PricePerKTok)
 $mins = [int]$gap
@@ -71,14 +76,14 @@ if ($answer) {
     # Ответ уже сохранён, промпта не было — советовать повторную отправку нечего,
     # а /remember отговаривать: скилл сам стоит дорогого хода по этому же контексту.
     $when = if ($expired) { "Пауза $mins мин, кэш истёк." } else { "Пауза $mins мин, кэш истекает через $left мин." }
-    $head = "$when Контекст ${k}k — перезапись ≈`$$price против ≈`$0.40 за новую сессию. Ответ сохранён, ход к модели не ушёл: продолжить здесь — напиши сообщение, и перезапись оплатится; дешевле закрыть сессию и начать новую, состояние записано в .remember, а handoff по этой сессии собирается из транскрипта за ≈`$0.02."
+    $head = "$when Контекст ${k}k — перезапись ≈`$$price против ≈`$$fresh за новую сессию. Ответ сохранён, ход к модели не ушёл: продолжить здесь — напиши сообщение, и перезапись оплатится; дешевле закрыть сессию и начать новую, состояние записано в .remember, а handoff по этой сессии собирается из транскрипта за ≈`$0.02."
 } elseif ($expired) {
     # Сохранение состояния отсюда стоит полной перезаписи контекста, поэтому
     # дешёвый путь называется прямо: выжимку транскрипта делает скрипт, и
     # handoff по закрытой сессии пишет сабагент из новой (docs/scripts.md).
-    $head = "Пауза $mins мин, кэш истёк. Контекст ${k}k — перезапись ≈`$$price против ≈`$0.40 за новую сессию. Состояние сессии уже записано в .remember, а handoff по этой сессии собирается из транскрипта за ≈`$0.02 — возвращаться сюда ради него дороже. Продолжить здесь — отправь сообщение ещё раз."
+    $head = "Пауза $mins мин, кэш истёк. Контекст ${k}k — перезапись ≈`$$price против ≈`$$fresh за новую сессию. Состояние сессии уже записано в .remember, а handoff по этой сессии собирается из транскрипта за ≈`$0.02 — возвращаться сюда ради него дороже. Продолжить здесь — отправь сообщение ещё раз."
 } else {
-    $head = "Пауза $mins мин, кэш истекает через $left мин. Контекст ${k}k — после истечения перезапись ≈`$$price против ≈`$0.40 за новую сессию. Продолжаешь — отправляй сейчас же ещё раз, иначе /remember и новая сессия."
+    $head = "Пауза $mins мин, кэш истекает через $left мин. Контекст ${k}k — после истечения перезапись ≈`$$price против ≈`$$fresh за новую сессию. Продолжаешь — отправляй сейчас же ещё раз, иначе /remember и новая сессия."
 }
 if ($tail.Length -gt 200) { $tail = '...' + $tail.Substring($tail.Length - 200) }
 # The blocked prompt is echoed by the client itself as "Original prompt", so
