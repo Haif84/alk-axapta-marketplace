@@ -30,6 +30,9 @@
       такое свойство не отклоняет, а молча пропускает («пропускается
       свойство X»), из-за чего расхождение не видно до проверки поведения
       формы вручную.
+  11. Каркас заголовка объекта по эталону AOT-экспорта (пустая строка после
+      `***Element`, комментарий, `; ---`, строка версии, строка-разделитель с тем
+      же отступом, объявление объекта) — ERROR. См. check_header_skeleton.
 
 Запуск:
     python -m Modules.validate_xpo <file_or_dir> [--strict]
@@ -1036,6 +1039,70 @@ def check_layout_consistency(
     )]
 
 
+def check_header_skeleton(path: pathlib.Path, text: str) -> List[Issue]:
+    """Каркас заголовка объекта по эталону AOT-экспорта.
+
+    Эталон (одинаков у CLS/TAB/DBE/JOB/ROL/FRM… в реальной выгрузке AX 2012):
+
+        ***Element: <MNEMONIC>
+        <пустая строка>
+        ; Microsoft Dynamics AX <Тип> ... unloaded
+        ; ----------------------------------------
+        <отступ><X>VERSION <N>
+        <ровно тот же отступ — строка-разделитель>
+        <объявление: CLASS/TABLE/FORM/ENUMTYPE/ROLE/SOURCE #Имя>
+
+    Строка-разделитель обязательна: без неё парсер импорта AX принимает
+    объявление за продолжение заголовка и показывает фантомный узел PROPERTIES
+    (так выглядел класс без строки после CLSVERSION). Остальные проверки этого
+    не видели — баланс блоков в таком файле корректен.
+    Проверяются только элементы, начинающиеся с комментария `; Microsoft Dynamics AX`
+    (AOS-выгрузка); элементы, собранные build-shared-project, не затрагиваются.
+    """
+    issues: List[Issue] = []
+    lines = text.splitlines()
+    for i, line in enumerate(lines):
+        m = ELEMENT_RE.match(line)
+        if not m or m.group(1) == "END":
+            continue
+        mnemonic = m.group(1)
+        j = i + 1
+        while j < len(lines) and lines[j] == "":
+            j += 1
+        if j >= len(lines) or not lines[j].startswith("; Microsoft Dynamics AX"):
+            continue
+        if j != i + 2:
+            issues.append(Issue(f"{path}:{i + 1}", "ERROR",
+                f"{mnemonic}: между ***Element и комментарием заголовка ровно одна пустая строка"))
+        if j + 1 >= len(lines) or not re.match(r"^; -{20,}$", lines[j + 1]):
+            issues.append(Issue(f"{path}:{j + 2}", "ERROR",
+                f"{mnemonic}: после комментария нужна строка '; ----…' (эталон AOT-экспорта)"))
+            continue
+        k = j + 2
+        mv = re.match(r"^(\s*)\w*VERSION\s+\d+\s*$", lines[k]) if k < len(lines) else None
+        if not mv:
+            found = lines[k].strip()[:40] if k < len(lines) else "<конец файла>"
+            issues.append(Issue(f"{path}:{k + 1}", "ERROR",
+                f"{mnemonic}: ожидается строка версии (…VERSION N), найдено: {found!r}"))
+            continue
+        indent = mv.group(1)
+        sep = lines[k + 1] if k + 1 < len(lines) else None
+        if sep != indent:
+            found = (sep if sep is not None else "<конец файла>").strip()[:40]
+            issues.append(Issue(f"{path}:{k + 2}", "ERROR",
+                f"{mnemonic}: после строки версии обязательна строка-разделитель из "
+                f"{len(indent)} пробел(ов) (эталон AOT); вместо неё {found!r}. "
+                f"Без неё импорт AX видит фантомный узел PROPERTIES и теряет объекты"))
+            continue
+        name_re = name_re_for(mnemonic)
+        decl = lines[k + 2] if k + 2 < len(lines) else ""
+        if name_re and not name_re.match(decl):
+            issues.append(Issue(f"{path}:{k + 3}", "ERROR",
+                f"{mnemonic}: сразу за разделителем должна идти строка объявления "
+                f"объекта, найдено: {decl.strip()[:40]!r}"))
+    return issues
+
+
 def check_xpp_style(path: pathlib.Path, text: str, affix: str) -> List[Issue]:
     """Оформление X++: регистр ключевых слов, имена, пробелы (см. xpp_style)."""
     return [Issue(f"{path}:{line}", "WARN", msg)
@@ -1056,6 +1123,7 @@ def validate_one(
         raw = raw[3:]
     text = raw.decode("utf-8", errors="replace")
     issues.extend(check_balance(path, text))
+    issues.extend(check_header_skeleton(path, text))
     issues.extend(check_mojibake(path, text))
     issues.extend(check_indices_shape(path, text))
     obj = detect_object(path, text)
