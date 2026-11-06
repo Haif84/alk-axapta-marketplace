@@ -60,7 +60,7 @@ Invoke-WebRequest "http://<host>:<port>/handshake" `
 
 Типичный MCP-endpoint: `http://<host>:<port>/mcp` (streamable HTTP /
 `text/event-stream`). Пример ответа `initialize`: `serverInfo.name` =
-`axapta-mcp-server`.
+`aleph` (на старых сборках сервера — `axapta-mcp-server`).
 
 ### Ключ — в переменную окружения, конфиг — на уровне пользователя
 
@@ -71,9 +71,15 @@ Invoke-WebRequest "http://<host>:<port>/handshake" `
 Claude Code — одна команда, конфиг уходит в `~/.claude.json`:
 
 ```powershell
-claude mcp add --scope user --transport http axapta `
+claude mcp add --scope user --transport http aleph `
   http://<host>:<port>/mcp --header 'Authorization: Bearer ${AX_MCP_KEY}'
 ```
+
+Имя подключения `aleph` клиент показывает в подписи вызовов и подставляет в
+полные имена инструментов (`mcp__aleph__<имя>`). Подключение со старым именем
+`axapta` продолжает работать. Чтобы сменить его, добавьте подключение командой
+выше, выполните `claude mcp remove --scope user axapta` и замените
+`mcp__axapta__` на `mcp__aleph__` в `permissions` файла `~/.claude/settings.json`.
 
 Cursor не поддерживает CLI для этого и не везде разворачивает `${VAR}` в
 `headers` — надёжнее всего вписать то же тело в `~/.cursor/mcp.json` вручную;
@@ -85,7 +91,7 @@ Cursor не поддерживает CLI для этого и не везде р
 ```json
 {
   "mcpServers": {
-    "axapta-mcp-server": {
+    "aleph": {
       "url": "http://<host>:<port>/mcp",
       "headers": {
         "Authorization": "Bearer ${AX_MCP_KEY}"
